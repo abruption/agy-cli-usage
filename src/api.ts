@@ -4,11 +4,12 @@
 //   1. POST /v1internal:loadCodeAssist  {metadata:{ideType:"ANTIGRAVITY"}}
 //        -> { cloudaicompanionProject, currentTier, ... }
 //   2. POST /v1internal:retrieveUserQuotaSummary  {project:<cloudaicompanionProject>}
-//        -> { groups:[ { displayName, description, buckets:[ {bucketId, displayName,
-//             window, resetTime, description?, remainingFraction} ] } ], description }
+//        -> { groups:[...], description }
 //
 // Captured from live agy traffic (mitmproxy). The internal endpoint is undocumented;
 // the PTY fallback exists for when it changes.
+
+import type { FetchResult, RawQuotaResponse } from './types.js';
 
 const UA = `antigravity-usage-monitor/0.1 ${process.platform}/${process.arch}`;
 
@@ -17,13 +18,24 @@ const UA = `antigravity-usage-monitor/0.1 ${process.platform}/${process.arch}`;
 const HOSTS = ['daily-cloudcode-pa.googleapis.com', 'cloudcode-pa.googleapis.com'];
 
 class ApiError extends Error {
-  constructor(message, status) {
+  status: number;
+  constructor(message: string, status: number) {
     super(message);
     this.status = status;
   }
 }
 
-function extractEmail(uri) {
+interface LoadCodeAssistResponse {
+  cloudaicompanionProject?: string;
+  currentTier?: { id?: string; upgradeSubscriptionUri?: string };
+}
+
+export interface FetchOptions {
+  host?: string;
+  channel?: 'daily' | 'prod';
+}
+
+function extractEmail(uri: string | undefined): string | null {
   const m = uri?.match(/[?&]Email=([^&]+)/);
   if (!m) return null;
   try {
@@ -33,7 +45,7 @@ function extractEmail(uri) {
   }
 }
 
-async function postInternal(host, accessToken, method, body) {
+async function postInternal<T>(host: string, accessToken: string, method: string, body: unknown): Promise<T> {
   const res = await fetch(`https://${host}/v1internal:${method}`, {
     method: 'POST',
     headers: {
@@ -46,16 +58,11 @@ async function postInternal(host, accessToken, method, body) {
   if (!res.ok) {
     throw new ApiError(`${method} -> HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
   }
-  return res.json();
+  return (await res.json()) as T;
 }
 
-/**
- * Fetch the raw quota summary from the Cloud Code API.
- * @param {string} accessToken
- * @param {{ host?: string, channel?: 'daily'|'prod' }} [opts]
- * @returns {Promise<{ raw: object, host: string, account: string|null, tier: string|null }>}
- */
-export async function fetchQuotaSummary(accessToken, opts = {}) {
+/** Fetch the raw quota summary from the Cloud Code API. */
+export async function fetchQuotaSummary(accessToken: string, opts: FetchOptions = {}): Promise<FetchResult> {
   const candidates = opts.host
     ? [opts.host]
     : opts.channel === 'prod'
@@ -64,16 +71,16 @@ export async function fetchQuotaSummary(accessToken, opts = {}) {
         ? ['daily-cloudcode-pa.googleapis.com']
         : HOSTS;
 
-  let lastErr;
+  let lastErr: unknown;
   for (const host of candidates) {
     try {
-      const lca = await postInternal(host, accessToken, 'loadCodeAssist', {
+      const lca = await postInternal<LoadCodeAssistResponse>(host, accessToken, 'loadCodeAssist', {
         metadata: { ideType: 'ANTIGRAVITY' },
       });
       const project = lca.cloudaicompanionProject;
       if (!project) throw new ApiError('loadCodeAssist returned no cloudaicompanionProject', 0);
 
-      const raw = await postInternal(host, accessToken, 'retrieveUserQuotaSummary', { project });
+      const raw = await postInternal<RawQuotaResponse>(host, accessToken, 'retrieveUserQuotaSummary', { project });
       return {
         raw,
         host,

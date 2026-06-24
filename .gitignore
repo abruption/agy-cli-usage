@@ -4,3 +4,6 @@ node_modules/
 
 # local-only project notes (not published)
 CLAUDE.md
+
+dist/
+*.tsbuildinfo

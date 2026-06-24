@@ -2,31 +2,32 @@
 // `/usage` layout (progress bar + percent + reset time per bucket).
 
 import { formatDuration } from './quota.js';
+import type { Bucket, Snapshot } from './types.js';
 
 const BAR_WIDTH = 50;
 
-const useColor = () => process.stdout.isTTY && !process.env.NO_COLOR;
-const c = (code, s) => (useColor() ? `\x1b[${code}m${s}\x1b[0m` : s);
-const dim = (s) => c('2', s);
-const bold = (s) => c('1', s);
+const useColor = (): boolean => Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+const c = (code: string, s: string): string => (useColor() ? `\x1b[${code}m${s}\x1b[0m` : s);
+const dim = (s: string): string => c('2', s);
+const bold = (s: string): string => c('1', s);
 
 // remaining-based color: lots left = green, getting low = yellow/red.
-function barColor(remaining) {
+function barColor(remaining: number | null): string {
   if (remaining == null) return '37';
   if (remaining > 0.5) return '32'; // green
   if (remaining > 0.2) return '33'; // yellow
   return '31'; // red
 }
 
-function bar(remainingFraction) {
+function bar(remainingFraction: number | null): string {
   const frac = remainingFraction == null ? 0 : Math.max(0, Math.min(1, remainingFraction));
   const filled = Math.round(frac * BAR_WIDTH);
   const body = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
   return useColor() ? `\x1b[${barColor(remainingFraction)}m${body}\x1b[0m` : body;
 }
 
-function bucketLine(b) {
-  const lines = [];
+function bucketLine(b: Bucket): string {
+  const lines: string[] = [];
   lines.push(`    ${bold(b.label)}`);
   if (b.available) {
     lines.push(`    [${bar(1)}] ${c('32', 'Quota available')}`);
@@ -42,8 +43,8 @@ function bucketLine(b) {
 }
 
 /** Returns the full panel as a string. */
-export function renderPanel(snap) {
-  const out = [];
+export function renderPanel(snap: Snapshot): string {
+  const out: string[] = [];
   out.push('');
   out.push(bold('  Models & Quota'));
   if (snap.account) out.push(`  ${dim('Account:')} ${snap.account}`);
@@ -65,9 +66,9 @@ export function renderPanel(snap) {
   return out.join('\n');
 }
 
-function wrap(text, width, prefix) {
+function wrap(text: string, width: number, prefix: string): string {
   const words = text.split(/\s+/);
-  const lines = [];
+  const lines: string[] = [];
   let cur = '';
   for (const w of words) {
     if ((cur + ' ' + w).trim().length > width) {

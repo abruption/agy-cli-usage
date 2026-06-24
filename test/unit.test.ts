@@ -1,5 +1,5 @@
 // Pure-logic tests — no credentials, keyring, network, or agy required.
-// Run with: node --test
+// Run against compiled output with: node --test dist/test/unit.test.js
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -64,9 +64,9 @@ test('fromApi normalizes the quota response', () => {
   const gWeekly = snap.groups[0].buckets[0];
   assert.equal(gWeekly.kind, 'weekly');
   assert.equal(gWeekly.remainingFraction, 0.9164178);
-  assert.ok(Math.abs(gWeekly.usedFraction - (1 - 0.9164178)) < 1e-9);
+  assert.ok(gWeekly.usedFraction !== null && Math.abs(gWeekly.usedFraction - (1 - 0.9164178)) < 1e-9);
   assert.equal(gWeekly.resetAt, '2026-06-27T03:53:09Z');
-  assert.ok(gWeekly.resetsInSeconds > 0);
+  assert.ok(gWeekly.resetsInSeconds !== null && gWeekly.resetsInSeconds > 0);
   assert.equal(gWeekly.available, false);
 
   const claude5h = snap.groups[1].buckets[1];

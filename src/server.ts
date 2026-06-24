@@ -1,20 +1,21 @@
 #!/usr/bin/env node
-// Optional lightweight HTTP endpoint for dashboard integration (e.g. ontology).
+// Optional lightweight HTTP endpoint for dashboard integration.
 // Serves the normalized quota snapshot as JSON, going through the same 5-minute
 // cache as the CLI so polling clients never hammer the upstream API.
 //
-//   PORT=3007 node server.js
+//   PORT=3007 node dist/src/server.js
 //   GET /quota   -> normalized snapshot JSON
 //   GET /healthz -> { ok: true }
 
 import { createServer } from 'node:http';
-import { getSnapshot } from './src/main.js';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { getSnapshot } from './main.js';
 
 const PORT = Number(process.env.PORT) || 3007;
 const HOST = process.env.HOST || '127.0.0.1';
 
-const server = createServer(async (req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
   if (url.pathname === '/healthz') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -34,7 +35,7 @@ const server = createServer(async (req, res) => {
       res.end(JSON.stringify(snap));
     } catch (err) {
       res.writeHead(502, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
     }
     return;
   }

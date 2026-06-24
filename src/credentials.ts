@@ -40,20 +40,26 @@ const B64_PREFIX = 'go-keyring-base64:';
 
 class CredentialError extends Error {}
 
+interface Cred {
+  accessToken: string;
+  refreshToken: string | null;
+  expiry: Date | null;
+  authMethod: string | null;
+}
+
 // --- raw keyring read --------------------------------------------------------
 
-async function readViaNapiEsm() {
+async function readViaNapiEsm(): Promise<string | null> {
   try {
-    const mod = await import('@napi-rs/keyring');
-    const Entry = mod.Entry ?? mod.default?.Entry;
+    const { Entry } = await import('@napi-rs/keyring');
     if (!Entry) return null;
-    return new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT).getPassword();
+    return new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT).getPassword() ?? null;
   } catch {
     return null;
   }
 }
 
-function readViaCli() {
+function readViaCli(): string | null {
   try {
     if (process.platform === 'darwin') {
       return execFileSync(
@@ -113,7 +119,7 @@ $b=[CredApi]::Read('${WIN_CRED_TARGET}')
 if($b -eq $null){ exit 1 }
 [Console]::Out.Write([Convert]::ToBase64String($b))`;
 
-function readViaWindowsCredman() {
+function readViaWindowsCredman(): string | null {
   if (process.platform !== 'win32') return null;
   try {
     const encoded = Buffer.from(PS_READ_CRED, 'utf16le').toString('base64');
@@ -126,7 +132,7 @@ function readViaWindowsCredman() {
     const raw = Buffer.from(b64, 'base64');
     // go-keyring writes the value as UTF-8; tolerate UTF-16LE just in case.
     const utf8 = raw.toString('utf8');
-    const looksValid = (s) => s.startsWith(B64_PREFIX) || s.trimStart().startsWith('{');
+    const looksValid = (s: string): boolean => s.startsWith(B64_PREFIX) || s.trimStart().startsWith('{');
     if (looksValid(utf8)) return utf8;
     const utf16 = raw.toString('utf16le');
     if (looksValid(utf16)) return utf16;
@@ -138,11 +144,11 @@ function readViaWindowsCredman() {
 
 // On headless Linux (no Secret Service) agy persists the token to a plain-JSON
 // file instead of the keyring. Same payload shape, no `go-keyring-base64:` prefix.
-function readViaFile() {
+function readViaFile(): string | null {
   const candidates = [
     process.env.AGY_OAUTH_TOKEN_FILE,
     join(homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token'),
-  ].filter(Boolean);
+  ].filter((p): p is string => Boolean(p));
   for (const path of candidates) {
     try {
       if (existsSync(path)) {
@@ -156,7 +162,7 @@ function readViaFile() {
   return null;
 }
 
-async function readRawSecret() {
+async function readRawSecret(): Promise<string | null> {
   const fromNapi = await readViaNapiEsm();
   if (fromNapi) return fromNapi;
   const fromCli = readViaCli();
@@ -170,36 +176,38 @@ async function readRawSecret() {
 
 // --- decode ------------------------------------------------------------------
 
-export function decodeSecret(raw) {
+export function decodeSecret(raw: string): Cred {
   const payload = raw.startsWith(B64_PREFIX)
     ? Buffer.from(raw.slice(B64_PREFIX.length), 'base64').toString('utf8')
     : raw;
-  let parsed;
+  let parsed: { token?: Record<string, unknown>; auth_method?: string } & Record<string, unknown>;
   try {
     parsed = JSON.parse(payload);
   } catch {
     throw new CredentialError('Stored agy credential is not valid JSON');
   }
-  const token = parsed.token ?? parsed;
-  if (!token?.access_token) {
+  const token = (parsed.token ?? parsed) as Record<string, unknown>;
+  const accessToken = token.access_token;
+  if (typeof accessToken !== 'string' || !accessToken) {
     throw new CredentialError('Stored agy credential has no access_token');
   }
+  const expiry = token.expiry;
   return {
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token,
-    expiry: token.expiry ? new Date(token.expiry) : null,
-    authMethod: parsed.auth_method ?? null,
+    accessToken,
+    refreshToken: typeof token.refresh_token === 'string' ? token.refresh_token : null,
+    expiry: typeof expiry === 'string' ? new Date(expiry) : null,
+    authMethod: typeof parsed.auth_method === 'string' ? parsed.auth_method : null,
   };
 }
 
 // --- refresh -----------------------------------------------------------------
 
-function isExpired(cred, skewMs = 60_000) {
+function isExpired(cred: Cred, skewMs = 60_000): boolean {
   if (!cred.expiry) return false;
   return cred.expiry.getTime() - Date.now() < skewMs;
 }
 
-async function refreshAccessToken(refreshToken) {
+async function refreshAccessToken(refreshToken: string): Promise<string> {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
@@ -214,19 +222,23 @@ async function refreshAccessToken(refreshToken) {
   if (!res.ok) {
     throw new CredentialError(`Token refresh failed: HTTP ${res.status} ${await res.text()}`);
   }
-  const json = await res.json();
+  const json = (await res.json()) as { access_token: string };
   return json.access_token;
 }
 
 // --- public API --------------------------------------------------------------
 
+export interface AccessToken {
+  accessToken: string;
+  authMethod: string | null;
+}
+
 /**
  * Returns a valid access token for the Cloud Code API, refreshing if needed.
  * Throws CredentialError if no credential can be read from any keyring backend
  * (the caller should then consider the PTY fallback).
- * @returns {Promise<{ accessToken: string, authMethod: string|null }>}
  */
-export async function getAccessToken() {
+export async function getAccessToken(): Promise<AccessToken> {
   const raw = await readRawSecret();
   if (!raw) {
     throw new CredentialError(
@@ -244,7 +256,7 @@ export async function getAccessToken() {
 }
 
 /** Whether a keyring-based credential is readable at all (no refresh attempted). */
-export async function hasCredential() {
+export async function hasCredential(): Promise<boolean> {
   return (await readRawSecret()) != null;
 }
 

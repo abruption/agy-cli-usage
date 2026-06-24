@@ -16,9 +16,10 @@ import { spawn } from 'node:child_process';
 import { writeFileSync, readFileSync, mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
+import type { BucketKind, ParsedBucket, ParsedGroup, ParsedPanel } from './types.js';
 
 // Resolve the agy binary: explicit AGY_BIN, then PATH, then common install dir.
-function resolveAgy() {
+function resolveAgy(): string {
   const explicit = process.env.AGY_BIN;
   if (explicit) return explicit;
   const exe = process.platform === 'win32' ? 'agy.exe' : 'agy';
@@ -38,34 +39,37 @@ const TEARDOWN_MS = 23_000; // keep session open long enough to render
 
 // --- capture: returns raw PTY bytes (Buffer) or null --------------------------
 
-async function captureViaNodePty() {
-  let pty;
+async function captureViaNodePty(): Promise<Buffer | null> {
+  // node-pty is an optional dependency; defeat static module resolution so the
+  // build doesn't require it (CI installs with --omit=optional).
+  const moduleName: string = 'node-pty';
+  let pty: any;
   try {
-    pty = await import('node-pty');
+    pty = await import(moduleName);
   } catch {
     return null;
   }
-  return new Promise((resolve) => {
-    let term;
+  return new Promise<Buffer | null>((resolve) => {
+    let term: any;
     try {
       term = pty.spawn(AGY_BIN, [], { name: 'xterm-256color', cols: COLS, rows: ROWS, cwd: process.cwd(), env: process.env });
     } catch {
       resolve(null);
       return;
     }
-    const chunks = [];
-    term.onData((d) => chunks.push(Buffer.from(d, 'utf8')));
-    const t1 = setTimeout(() => { try { term.write('/usage\r'); } catch {} }, USAGE_AT_MS);
+    const chunks: Buffer[] = [];
+    term.onData((d: string) => chunks.push(Buffer.from(d, 'utf8')));
+    const t1 = setTimeout(() => { try { term.write('/usage\r'); } catch { /* ignore */ } }, USAGE_AT_MS);
     const t2 = setTimeout(() => {
-      try { term.write('\x03'); } catch {}
-      try { term.kill(); } catch {}
+      try { term.write('\x03'); } catch { /* ignore */ }
+      try { term.kill(); } catch { /* ignore */ }
       resolve(Buffer.concat(chunks));
     }, TEARDOWN_MS);
     term.onExit(() => { clearTimeout(t1); clearTimeout(t2); resolve(Buffer.concat(chunks)); });
   });
 }
 
-async function captureViaPython() {
+async function captureViaPython(): Promise<Buffer | null> {
   if (process.platform === 'win32') return null;
   const dir = mkdtempSync(join(tmpdir(), 'agy-usage-'));
   const helper = join(dir, 'drive.py');
@@ -98,7 +102,7 @@ except Exception: pass
 out.close()
 `,
   );
-  return new Promise((resolve) => {
+  return new Promise<Buffer | null>((resolve) => {
     const proc = spawn('python3', [helper], { stdio: 'ignore' });
     proc.on('error', () => resolve(null));
     proc.on('exit', () => {
@@ -109,25 +113,24 @@ out.close()
 
 // --- VT reconstruction --------------------------------------------------------
 
-async function reconstructScreen(raw) {
-  const mod = await import('@xterm/headless');
-  const Terminal = mod.Terminal ?? mod.default?.Terminal ?? mod.default;
+async function reconstructScreen(raw: Buffer): Promise<string> {
+  const { Terminal } = await import('@xterm/headless');
   const term = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 200 });
-  await new Promise((res) => term.write(raw, res));
+  await new Promise<void>((res) => term.write(raw, res));
   const buf = term.buffer.active;
-  const lines = [];
+  const lines: string[] = [];
   // include scrollback so a panel taller than the viewport is still captured
   for (let i = 0; i < buf.length; i++) {
     const line = buf.getLine(i);
     if (line) lines.push(line.translateToString(true).replace(/\s+$/, ''));
   }
-  term.dispose?.();
+  term.dispose();
   return lines.join('\n');
 }
 
 // --- parse --------------------------------------------------------------------
 
-function parseDuration(text) {
+function parseDuration(text: string): number | null {
   let seconds = 0;
   const d = text.match(/(\d+)\s*day/i);
   const h = text.match(/(\d+)\s*h(?:our)?/i);
@@ -139,15 +142,15 @@ function parseDuration(text) {
 }
 
 /** Parse the reconstructed /usage screen text into { account, groups:[...] }. */
-export function parsePanel(text) {
+export function parsePanel(text: string): ParsedPanel {
   const lines = text.split(/\r?\n/);
   const account = text.match(/Account:\s*(\S+)/)?.[1] ?? null;
 
-  const groups = [];
-  let group = null;
-  let bucket = null;
-  const pushBucket = () => { if (group && bucket) group.buckets.push(bucket); bucket = null; };
-  const pushGroup = () => { pushBucket(); if (group) groups.push(group); group = null; };
+  const groups: ParsedGroup[] = [];
+  let group: ParsedGroup | null = null;
+  let bucket: ParsedBucket | null = null;
+  const pushBucket = (): void => { if (group && bucket) group.buckets.push(bucket); bucket = null; };
+  const pushGroup = (): void => { pushBucket(); if (group) groups.push(group); group = null; };
 
   for (const line of lines) {
     const t = line.trim();
@@ -163,14 +166,8 @@ export function parsePanel(text) {
 
     if (/^(Weekly Limit|Five Hour Limit|5[- ]?Hour Limit)$/i.test(t)) {
       pushBucket();
-      bucket = {
-        kind: /week/i.test(t) ? 'weekly' : '5h',
-        label: t,
-        remainingFraction: null,
-        resetsInSeconds: null,
-        available: false,
-        description: null,
-      };
+      const kind: BucketKind = /week/i.test(t) ? 'weekly' : '5h';
+      bucket = { kind, label: t, remainingFraction: null, resetsInSeconds: null, available: false, description: null };
       continue;
     }
     if (bucket) {
@@ -185,16 +182,13 @@ export function parsePanel(text) {
   return { account, groups };
 }
 
-/**
- * Run agy, capture /usage, reconstruct + parse the panel.
- * @returns {Promise<{ account, groups }>}
- */
-export async function captureUsageViaPty() {
+/** Run agy, capture /usage, reconstruct + parse the panel. */
+export async function captureUsageViaPty(): Promise<ParsedPanel> {
   const order = process.platform === 'win32'
     ? [captureViaNodePty, captureViaPython]
     : [captureViaPython, captureViaNodePty];
 
-  let raw = null;
+  let raw: Buffer | null = null;
   for (const fn of order) {
     raw = await fn();
     if (raw && raw.length) break;

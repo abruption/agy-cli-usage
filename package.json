@@ -3,22 +3,25 @@
   "version": "0.3.1",
   "description": "Headless usage/quota monitor for the Antigravity CLI (agy) — reads Cloud Code quota directly, with a PTY fallback. No IDE required.",
   "type": "module",
+  "types": "dist/src/main.d.ts",
   "bin": {
-    "agy-cli-usage": "src/main.js",
-    "agy-usage": "src/main.js"
+    "agy-cli-usage": "dist/src/main.js",
+    "agy-usage": "dist/src/main.js"
   },
   "scripts": {
-    "start": "node src/main.js",
-    "serve": "node server.js",
-    "test": "node --test",
-    "check": "node --check src/main.js && node --check server.js"
+    "build": "tsc",
+    "check": "tsc --noEmit",
+    "pretest": "tsc",
+    "test": "node --test dist/test/unit.test.js",
+    "start": "tsc && node dist/src/main.js",
+    "serve": "tsc && node dist/src/server.js",
+    "prepack": "tsc"
   },
   "engines": {
     "node": ">=18"
   },
   "files": [
-    "src/",
-    "server.js",
+    "dist/src/",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -49,5 +52,9 @@
   "optionalDependencies": {
     "node-pty": "^1.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^26.0.0",
+    "typescript": "^6.0.3"
+  }
 }

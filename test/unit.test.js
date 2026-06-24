@@ -8,7 +8,20 @@ import { fromApi, fromPty, formatDuration } from '../src/quota.js';
 import { parsePanel } from '../src/pty-fallback.js';
 import { renderPanel } from '../src/render.js';
 import { decodeSecret } from '../src/credentials.js';
+import { semverCompare, currentVersion } from '../src/update.js';
 import { SAMPLE_QUOTA_RESPONSE, SAMPLE_PANEL_TEXT, NOW_MS } from './fixtures.js';
+
+test('semverCompare orders versions numerically', () => {
+  assert.ok(semverCompare('0.3.0', '0.2.0') > 0);
+  assert.ok(semverCompare('0.2.0', '0.10.0') < 0); // numeric, not lexical
+  assert.equal(semverCompare('1.2.3', '1.2.3'), 0);
+  assert.equal(semverCompare('v1.0.0', '1.0.0'), 0); // tolerates leading v
+  assert.ok(semverCompare('1.0.0', '1.0.0-rc.1') === 0); // prerelease ignored
+});
+
+test('currentVersion reads a valid semver from package.json', () => {
+  assert.match(currentVersion(), /^\d+\.\d+\.\d+/);
+});
 
 const TOKEN_JSON = {
   token: {

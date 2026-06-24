@@ -1,0 +1,52 @@
+{
+  "name": "agy-cli-usage",
+  "version": "0.1.0",
+  "description": "Headless usage/quota monitor for the Antigravity CLI (agy) — reads Cloud Code quota directly, with a PTY fallback. No IDE required.",
+  "type": "module",
+  "bin": {
+    "agy-cli-usage": "src/main.js",
+    "agy-usage": "src/main.js"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "serve": "node server.js",
+    "test": "node --test",
+    "check": "node --check src/main.js && node --check server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src/",
+    "server.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "antigravity",
+    "agy",
+    "gemini",
+    "code-assist",
+    "quota",
+    "usage",
+    "cli",
+    "rate-limit"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abruption/agy-cli-usage.git"
+  },
+  "homepage": "https://github.com/abruption/agy-cli-usage#readme",
+  "bugs": {
+    "url": "https://github.com/abruption/agy-cli-usage/issues"
+  },
+  "author": "abruption",
+  "dependencies": {
+    "@napi-rs/keyring": "^1.3.0",
+    "@xterm/headless": "^6.0.0"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
+  },
+  "license": "MIT"
+}

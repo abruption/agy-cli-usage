@@ -10,6 +10,14 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.0](https://github.com/abruption/agy-cli-usage/compare/v0.3.1...v0.4.0) (2026-06-24)
+
+
+### Features
+
+* ship as a compiled TypeScript build with bundled type declarations ([0e253ea](https://github.com/abruption/agy-cli-usage/commit/0e253ea353e99efe5bfd176f5b6775d76718b3a9))
+* ship compiled TypeScript build with type declarations ([#20](https://github.com/abruption/agy-cli-usage/issues/20)) ([0e253ea](https://github.com/abruption/agy-cli-usage/commit/0e253ea353e99efe5bfd176f5b6775d76718b3a9))
+
 ## [0.3.1](https://github.com/abruption/agy-cli-usage/compare/v0.3.0...v0.3.1) (2026-06-24)
 
 

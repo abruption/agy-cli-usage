@@ -9,12 +9,15 @@
 //   agy-usage --channel daily|prod    Cloud Code host (default: auto-detect)
 //   agy-usage --no-cache      bypass the 5-minute cache
 //   agy-usage --refresh       force a fresh fetch (alias for --no-cache)
+//   agy-usage update [--check]  self-update via npm
+//   agy-usage --version | -v  print the installed version
 
 import { getAccessToken, CredentialError } from './credentials.js';
 import { fetchQuotaSummary } from './api.js';
 import { captureUsageViaPty } from './pty-fallback.js';
 import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
+import { currentVersion, runUpdate } from './update.js';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -24,16 +27,19 @@ const CACHE_FILE = join(CACHE_DIR, 'quota.json');
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 function parseArgs(argv) {
-  const o = { json: false, watch: null, source: 'auto', channel: 'auto', cache: true };
+  const o = { json: false, watch: null, source: 'auto', channel: 'auto', cache: true, command: null, check: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--json') o.json = true;
+    if (a === 'update' && o.command == null) o.command = 'update';
+    else if (a === '--json') o.json = true;
     else if (a === '--watch') {
       const n = Number(argv[i + 1]);
       if (Number.isFinite(n)) { o.watch = n; i++; } else o.watch = 60;
     } else if (a === '--source') o.source = argv[++i];
     else if (a === '--channel') o.channel = argv[++i];
     else if (a === '--no-cache' || a === '--refresh') o.cache = false;
+    else if (a === '--check') o.check = true;
+    else if (a === '-v' || a === '--version') o.version = true;
     else if (a === '-h' || a === '--help') o.help = true;
   }
   return o;
@@ -47,6 +53,8 @@ const HELP = `agy-usage — Antigravity CLI (agy) usage/quota monitor
   agy-usage --source <auto|api|pty>
   agy-usage --channel <auto|daily|prod>
   agy-usage --no-cache | --refresh
+  agy-usage update [--check]  self-update via npm (--check: report only)
+  agy-usage --version | -v
 `;
 
 // --- cache -------------------------------------------------------------------
@@ -104,6 +112,8 @@ async function once(opts) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) { process.stdout.write(HELP); return; }
+  if (opts.version) { process.stdout.write(currentVersion() + '\n'); return; }
+  if (opts.command === 'update') { process.exit(await runUpdate({ checkOnly: opts.check })); }
 
   if (opts.watch != null) {
     const intervalMs = Math.max(5, opts.watch) * 1000;

@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.3.1](https://github.com/abruption/agy-cli-usage/compare/v0.3.0...v0.3.1) (2026-06-24)
+
+
+### Bug Fixes
+
+* read agy token from Windows Credential Manager ([#14](https://github.com/abruption/agy-cli-usage/issues/14)) ([e5cb274](https://github.com/abruption/agy-cli-usage/commit/e5cb274c6a0a6aa1ddf6b491d417bfc81c04916a)), closes [#13](https://github.com/abruption/agy-cli-usage/issues/13)
+
 ## [0.2.0](https://github.com/abruption/agy-cli-usage/compare/v0.1.0...v0.2.0) (2026-06-24)
 
 ### Features

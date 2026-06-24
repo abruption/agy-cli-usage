@@ -1,7 +1,9 @@
 // Sample payloads captured from live agy traffic / rendered panels, used by the
 // unit tests so they run without credentials or network access.
 
-export const SAMPLE_QUOTA_RESPONSE = {
+import type { RawQuotaResponse } from '../src/types.js';
+
+export const SAMPLE_QUOTA_RESPONSE: RawQuotaResponse = {
   groups: [
     {
       displayName: 'Gemini Models',

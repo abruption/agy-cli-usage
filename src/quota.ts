@@ -1,36 +1,22 @@
 // Normalizes quota data from either source (direct API JSON or PTY-parsed text)
 // into one shape consumed by the renderer / JSON output / HTTP endpoint.
-//
-// Normalized model:
-//   {
-//     account, fetchedAt, source: 'api'|'pty', host?,
-//     note,                       // the API's overall description blurb
-//     groups: [
-//       { name, models,           // e.g. "Gemini Models", "Gemini Flash, Gemini Pro"
-//         buckets: [
-//           { kind: 'weekly'|'5h', label,
-//             remainingFraction,  // 0..1  (null if unknown)
-//             usedFraction,       // 1 - remaining
-//             resetAt,            // ISO string or null
-//             resetsInSeconds,    // derived from resetAt - now (null if unknown)
-//             available,          // true when nothing consumed (remainingFraction === 1)
-//             description } ] } ]
-//   }
 
-function bucketKind(window, label) {
+import type { BucketKind, FetchResult, ParsedPanel, Snapshot } from './types.js';
+
+function bucketKind(window: string | undefined, label: string): BucketKind {
   if (window === 'weekly' || /week/i.test(label)) return 'weekly';
   if (window === '5h' || /5.?hour|five.?hour/i.test(label)) return '5h';
   return window || label;
 }
 
-function secondsUntil(resetAt, now) {
+function secondsUntil(resetAt: string | undefined, now: number): number | null {
   if (!resetAt) return null;
   const ms = new Date(resetAt).getTime() - now;
   return Number.isFinite(ms) ? Math.max(0, Math.round(ms / 1000)) : null;
 }
 
 /** Build a normalized snapshot from the raw retrieveUserQuotaSummary response. */
-export function fromApi({ raw, host, account, tier }, nowMs = Date.now()) {
+export function fromApi({ raw, host, account, tier }: FetchResult, nowMs: number = Date.now()): Snapshot {
   const groups = (raw.groups ?? []).map((g) => ({
     name: g.displayName ?? 'Models',
     models: (g.description ?? '').replace(/^Models within this group:\s*/i, '').trim(),
@@ -59,12 +45,8 @@ export function fromApi({ raw, host, account, tier }, nowMs = Date.now()) {
   };
 }
 
-/**
- * Build a normalized snapshot from PTY-parsed groups (see pty-fallback.js).
- * Input groups: [{ name, models, buckets:[{ kind, label, remainingFraction,
- *   resetsInSeconds, available, description }] }]
- */
-export function fromPty(parsed, nowMs = Date.now()) {
+/** Build a normalized snapshot from PTY-parsed groups (see pty-fallback.ts). */
+export function fromPty(parsed: ParsedPanel, nowMs: number = Date.now()): Snapshot {
   const groups = (parsed.groups ?? []).map((g) => ({
     name: g.name,
     models: g.models ?? '',
@@ -91,7 +73,7 @@ export function fromPty(parsed, nowMs = Date.now()) {
 }
 
 /** Format a seconds duration like agy: "73h 53m" / "2h 7m" / "12m". */
-export function formatDuration(seconds) {
+export function formatDuration(seconds: number | null): string | null {
   if (seconds == null) return null;
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);

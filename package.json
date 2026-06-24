@@ -21,7 +21,8 @@
     "node": ">=18"
   },
   "files": [
-    "dist/src/",
+    "dist/src/**/*.js",
+    "dist/src/**/*.d.ts",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"

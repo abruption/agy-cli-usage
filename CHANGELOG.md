@@ -1,3 +1,14 @@
+## [0.3.0](https://github.com/abruption/agy-cli-usage/compare/v0.2.0...v0.3.0) (2026-06-24)
+
+
+### Features
+
+* add --version flag and self-update command ([#8](https://github.com/abruption/agy-cli-usage/issues/8)) ([811e82f](https://github.com/abruption/agy-cli-usage/commit/811e82f057e709b92b7a7665b01c54dde913b0d4)), closes [#7](https://github.com/abruption/agy-cli-usage/issues/7)
+
+
+### Bug Fixes
+
+* use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
 ## [0.2.0](https://github.com/abruption/agy-cli-usage/compare/v0.1.0...v0.2.0) (2026-06-24)
 

@@ -98,16 +98,19 @@ agy-cli-usage --version        # 버전 출력
 ## 🔌 HTTP 엔드포인트 (선택)
 
 ```bash
-PORT=3007 node server.js     # GET /quota → 정규화 JSON (5분 캐시), GET /healthz
+PORT=3007 npm run serve      # GET /quota → 정규화 JSON (5분 캐시), GET /healthz
 ```
 
 외부 대시보드/스크립트에서 `GET /quota`로 소비하거나 `agy-cli-usage --json`을 subprocess로 호출하세요.
 
 ## 🛠️ 개발 / 릴리스
 
+TypeScript(strict, ESM)로 작성하고 `tsc`로 `dist/`에 컴파일합니다.
+
 ```bash
-npm test          # node --test (자격증명·네트워크 불필요, 순수 로직)
-npm run check     # 구문 검사
+npm run build     # tsc → dist/ (컴파일된 JS + .d.ts)
+npm run check     # tsc --noEmit (타입 체크)
+npm test          # 빌드 후 node --test (자격증명·네트워크 불필요, 순수 로직)
 ```
 
 - **CI**: push/PR마다 ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.

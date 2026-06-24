@@ -10,10 +10,15 @@
 // Read backends, tried in order:
 //   1. @napi-rs/keyring native module  (macOS / Windows / Linux Secret Service)
 //   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
-// If every backend fails (e.g. a headless Linux box with no Secret Service),
-// the caller falls back to the PTY path which drives `agy` itself.
+//   3. File fallback                    (headless Linux: agy can't reach a keyring
+//                                        and writes the token to a plain-JSON file)
+// If every backend fails, the caller falls back to the PTY path which drives
+// `agy` itself.
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 // OAuth client for the Antigravity CLI. This is an installed/desktop ("public")
 // OAuth client: per Google's own docs the client secret of an installed app is
@@ -68,17 +73,39 @@ function readViaCli() {
   return null;
 }
 
+// On headless Linux (no Secret Service) agy persists the token to a plain-JSON
+// file instead of the keyring. Same payload shape, no `go-keyring-base64:` prefix.
+function readViaFile() {
+  const candidates = [
+    process.env.AGY_OAUTH_TOKEN_FILE,
+    join(homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token'),
+  ].filter(Boolean);
+  for (const path of candidates) {
+    try {
+      if (existsSync(path)) {
+        const content = readFileSync(path, 'utf8').trim();
+        if (content) return content;
+      }
+    } catch {
+      // unreadable (perms) — try next candidate
+    }
+  }
+  return null;
+}
+
 async function readRawSecret() {
   const fromNapi = await readViaNapiEsm();
   if (fromNapi) return fromNapi;
   const fromCli = readViaCli();
   if (fromCli) return fromCli;
+  const fromFile = readViaFile();
+  if (fromFile) return fromFile;
   return null;
 }
 
 // --- decode ------------------------------------------------------------------
 
-function decodeSecret(raw) {
+export function decodeSecret(raw) {
   const payload = raw.startsWith(B64_PREFIX)
     ? Buffer.from(raw.slice(B64_PREFIX.length), 'base64').toString('utf8')
     : raw;
@@ -138,8 +165,9 @@ export async function getAccessToken() {
   const raw = await readRawSecret();
   if (!raw) {
     throw new CredentialError(
-      'Could not read agy credential from the OS keyring. ' +
-        'Is agy logged in on this machine? (headless servers may lack a keyring — use --source pty)',
+      'Could not read agy credential from the OS keyring or token file. ' +
+        'Is agy logged in on this machine? (set AGY_OAUTH_TOKEN_FILE to override the path, ' +
+        'or use --source pty)',
     );
   }
   const cred = decodeSecret(raw);

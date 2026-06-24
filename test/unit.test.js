@@ -7,7 +7,33 @@ import assert from 'node:assert/strict';
 import { fromApi, fromPty, formatDuration } from '../src/quota.js';
 import { parsePanel } from '../src/pty-fallback.js';
 import { renderPanel } from '../src/render.js';
+import { decodeSecret } from '../src/credentials.js';
 import { SAMPLE_QUOTA_RESPONSE, SAMPLE_PANEL_TEXT, NOW_MS } from './fixtures.js';
+
+const TOKEN_JSON = {
+  token: {
+    access_token: 'ya29.fake',
+    token_type: 'Bearer',
+    refresh_token: '1//fake',
+    expiry: '2099-01-01T00:00:00Z',
+  },
+  auth_method: 'consumer',
+};
+
+test('decodeSecret reads the plain-JSON token file (headless Linux)', () => {
+  const cred = decodeSecret(JSON.stringify(TOKEN_JSON));
+  assert.equal(cred.accessToken, 'ya29.fake');
+  assert.equal(cred.refreshToken, '1//fake');
+  assert.equal(cred.authMethod, 'consumer');
+  assert.ok(cred.expiry instanceof Date);
+});
+
+test('decodeSecret reads the go-keyring-base64 keyring value (desktop)', () => {
+  const raw = 'go-keyring-base64:' + Buffer.from(JSON.stringify(TOKEN_JSON)).toString('base64');
+  const cred = decodeSecret(raw);
+  assert.equal(cred.accessToken, 'ya29.fake');
+  assert.equal(cred.refreshToken, '1//fake');
+});
 
 test('formatDuration formats like agy', () => {
   assert.equal(formatDuration(73 * 3600 + 18 * 60), '73h 18m');

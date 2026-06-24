@@ -39,20 +39,23 @@ agy-usage --no-cache               # 5분 캐시 무시하고 강제 조회
 
 `agy`는 OAuth 토큰을 OS 키링(zalando/go-keyring 규약, service=`gemini`/account=`antigravity`)에 저장한다.
 
-1. **직접 API (기본)** — 키링에서 토큰을 읽고(만료 시 자동 refresh), `agy`와 동일하게:
+1. **직접 API (기본)** — 토큰을 읽고(만료 시 자동 refresh), `agy`와 동일하게:
    - `POST https://<host>/v1internal:loadCodeAssist` → `cloudaicompanionProject` 획득
    - `POST https://<host>/v1internal:retrieveUserQuotaSummary {project}` → 쿼타
    - 호스트: `daily-cloudcode-pa.googleapis.com`(현재 CLI) 또는 `cloudcode-pa.googleapis.com`
-2. **PTY 폴백** — 키링을 읽을 수 없거나(헤드리스 등) 내부 API가 바뀌면, `agy`를 가상 터미널로 띄워 `/usage`를 보내고, `@xterm/headless`로 alt-screen을 재구성해 패널을 파싱한다.
+   - 토큰 소스: **키링 → 토큰 파일 → (실패 시) PTY** 순으로 자동 시도
+2. **PTY 폴백** — 위 토큰 소스를 모두 읽을 수 없거나 내부 API가 바뀌면, `agy`를 가상 터미널로 띄워 `/usage`를 보내고, `@xterm/headless`로 alt-screen을 재구성해 패널을 파싱한다.
 
 ### 크로스플랫폼 자격증명
 
-| OS | 키링 백엔드 | 비고 |
+| OS | 토큰 소스 | 비고 |
 |----|-----------|------|
 | macOS | Keychain | `@napi-rs/keyring`, CLI 폴백 `security` |
 | Windows | Credential Manager | `@napi-rs/keyring` |
 | Linux (데스크톱) | Secret Service | `@napi-rs/keyring`, CLI 폴백 `secret-tool` |
-| Linux (헤드리스) | — | Secret Service 부재 시 `--source pty`로 우회 (python3 필요) |
+| Linux (헤드리스) | **토큰 파일** | 키링 부재 시 `~/.gemini/antigravity-cli/antigravity-oauth-token`(순수 JSON) 읽음 → **API 경로 동작**. `AGY_OAUTH_TOKEN_FILE`로 경로 override |
+
+> 헤드리스 서버에서도 토큰 파일을 읽어 빠른 API 경로를 쓴다. 파일조차 없으면 `--source pty`로 우회(python3 필요).
 
 ## HTTP 엔드포인트 (선택)
 

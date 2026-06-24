@@ -11,9 +11,7 @@
     "start": "node src/main.js",
     "serve": "node server.js",
     "test": "node --test",
-    "check": "node --check src/main.js && node --check server.js",
-    "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -s",
-    "version": "npm run changelog && git add CHANGELOG.md"
+    "check": "node --check src/main.js && node --check server.js"
   },
   "engines": {
     "node": ">=18"
@@ -51,8 +49,5 @@
   "optionalDependencies": {
     "node-pty": "^1.0.0"
   },
-  "license": "MIT",
-  "devDependencies": {
-    "conventional-changelog-cli": "^5.0.0"
-  }
+  "license": "MIT"
 }

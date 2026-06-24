@@ -8,9 +8,11 @@
 //     "auth_method": "consumer" }
 //
 // Read backends, tried in order:
-//   1. @napi-rs/keyring native module  (macOS / Windows / Linux Secret Service)
+//   1. @napi-rs/keyring native module  (macOS / Linux Secret Service)
 //   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
-//   3. File fallback                    (headless Linux: agy can't reach a keyring
+//   3. Windows Credential Manager       (CredRead via powershell.exe — go-keyring's
+//                                        target format differs from keyring-rs's)
+//   4. File fallback                    (headless Linux: agy can't reach a keyring
 //                                        and writes the token to a plain-JSON file)
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
@@ -73,6 +75,67 @@ function readViaCli() {
   return null;
 }
 
+// On Windows, agy stores the token in Credential Manager via Go's
+// zalando/go-keyring, whose target name is `service:account` ("gemini:antigravity").
+// @napi-rs/keyring (keyring-rs) uses a different target format and can't find it,
+// so we read the credential blob directly via the Win32 CredRead API through the
+// built-in powershell.exe (no extra dependency).
+const WIN_CRED_TARGET = `${KEYRING_SERVICE}:${KEYRING_ACCOUNT}`;
+
+const PS_READ_CRED = `$ErrorActionPreference='Stop'
+$sig=@'
+using System;
+using System.Runtime.InteropServices;
+public class CredApi {
+  [DllImport("advapi32.dll", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool CredRead(string target, int type, int flags, out IntPtr cred);
+  [DllImport("advapi32.dll")] public static extern void CredFree(IntPtr cred);
+  [StructLayout(LayoutKind.Sequential)]
+  public struct CREDENTIAL {
+    public int Flags; public int Type; public IntPtr TargetName; public IntPtr Comment;
+    public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+    public int CredentialBlobSize; public IntPtr CredentialBlob; public int Persist;
+    public int AttributeCount; public IntPtr Attributes; public IntPtr TargetAlias; public IntPtr UserName;
+  }
+  public static byte[] Read(string target){
+    IntPtr p; if(!CredRead(target,1,0,out p)) return null;
+    try {
+      var c=(CREDENTIAL)Marshal.PtrToStructure(p,typeof(CREDENTIAL));
+      var b=new byte[c.CredentialBlobSize];
+      if(c.CredentialBlobSize>0) Marshal.Copy(c.CredentialBlob,b,0,c.CredentialBlobSize);
+      return b;
+    } finally { CredFree(p); }
+  }
+}
+'@
+Add-Type -TypeDefinition $sig | Out-Null
+$b=[CredApi]::Read('${WIN_CRED_TARGET}')
+if($b -eq $null){ exit 1 }
+[Console]::Out.Write([Convert]::ToBase64String($b))`;
+
+function readViaWindowsCredman() {
+  if (process.platform !== 'win32') return null;
+  try {
+    const encoded = Buffer.from(PS_READ_CRED, 'utf16le').toString('base64');
+    const b64 = execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      { encoding: 'utf8' },
+    ).trim();
+    if (!b64) return null;
+    const raw = Buffer.from(b64, 'base64');
+    // go-keyring writes the value as UTF-8; tolerate UTF-16LE just in case.
+    const utf8 = raw.toString('utf8');
+    const looksValid = (s) => s.startsWith(B64_PREFIX) || s.trimStart().startsWith('{');
+    if (looksValid(utf8)) return utf8;
+    const utf16 = raw.toString('utf16le');
+    if (looksValid(utf16)) return utf16;
+    return utf8;
+  } catch {
+    return null;
+  }
+}
+
 // On headless Linux (no Secret Service) agy persists the token to a plain-JSON
 // file instead of the keyring. Same payload shape, no `go-keyring-base64:` prefix.
 function readViaFile() {
@@ -98,6 +161,8 @@ async function readRawSecret() {
   if (fromNapi) return fromNapi;
   const fromCli = readViaCli();
   if (fromCli) return fromCli;
+  const fromWin = readViaWindowsCredman();
+  if (fromWin) return fromWin;
   const fromFile = readViaFile();
   if (fromFile) return fromFile;
   return null;

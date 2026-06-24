@@ -73,12 +73,14 @@ npm run check     # 구문 검사
 ```
 
 - **CI** (`.github/workflows/ci.yml`): push/PR마다 ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.
-- **Release** (`.github/workflows/release.yml`): `v*` 태그 push 시 빌드·테스트 후 npm publish(provenance) + GitHub Release 생성. `NPM_TOKEN` 시크릿 필요.
+- **Release** ([release-please](https://github.com/googleapis/release-please), `.github/workflows/release-please.yml`): Conventional Commits 기반 **완전 자동화**. `NPM_TOKEN` 시크릿 필요.
 
-```bash
-npm version patch        # package.json 버전 +0.0.1 & v* 태그 생성
-git push --follow-tags   # → Release 워크플로 실행 → npm 자동 배포
-```
+릴리스 절차 — 수동 버전 범프 없음:
+
+1. `feat:`/`fix:` 등 Conventional Commits를 main에 머지하면, release-please가 **Release PR**(버전 범프 + CHANGELOG 갱신)을 자동 생성·유지.
+2. 그 **Release PR을 머지**하면 → GitHub Release + 태그 생성 → 같은 워크플로가 `npm publish --provenance` 실행.
+
+> 즉 "Release PR 머지" 한 번이 전체 배포다.
 
 ## 주의
 

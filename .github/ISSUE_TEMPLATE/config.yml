@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question / Discussion
+    url: https://github.com/abruption/agy-cli-usage/discussions
+    about: Ask a question or discuss usage before opening an issue.

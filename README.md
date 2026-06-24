@@ -5,6 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/agy-cli-usage?color=cb3837&logo=npm)](https://www.npmjs.com/package/agy-cli-usage)
 [![npm downloads](https://img.shields.io/npm/dm/agy-cli-usage?color=cb3837&logo=npm)](https://www.npmjs.com/package/agy-cli-usage)
 [![CI](https://github.com/abruption/agy-cli-usage/actions/workflows/ci.yml/badge.svg)](https://github.com/abruption/agy-cli-usage/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![node](https://img.shields.io/node/v/agy-cli-usage?color=339933&logo=node.js)](https://www.npmjs.com/package/agy-cli-usage)
 [![license](https://img.shields.io/npm/l/agy-cli-usage?color=blue)](LICENSE)
 

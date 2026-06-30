@@ -13,6 +13,8 @@
 
 Reads `agy`'s `/usage` panel — per–model-group weekly & 5-hour limits, remaining percentage, and refresh times — **headlessly**. No IDE required; works on macOS · Linux · Windows · headless servers.
 
+**English** · [한국어](README.ko.md)
+
 <sub>Inspired by <a href="https://github.com/skainguyen1412/antigravity-usage">skainguyen1412/antigravity-usage</a> — which targets the Antigravity <b>IDE</b>; this targets the <b>CLI</b> (<code>agy</code>).</sub>
 
 </div>

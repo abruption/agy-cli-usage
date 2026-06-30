@@ -1,6 +1,6 @@
 {
   "name": "agy-cli-usage",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Headless usage/quota monitor for the Antigravity CLI (agy) — reads Cloud Code quota directly, with a PTY fallback. No IDE required.",
   "type": "module",
   "types": "dist/src/main.d.ts",

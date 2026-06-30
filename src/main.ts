@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// agy-usage — Antigravity CLI (agy) usage/quota monitor.
+// agy-cli-usage — Antigravity CLI (agy) usage/quota monitor.
 //
 // Usage:
-//   agy-usage                 one-shot panel (like agy's /usage)
-//   agy-usage --json          machine-readable JSON
-//   agy-usage --watch [secs]  refresh every N seconds (default 60)
-//   agy-usage --source api|pty|auto   data source (default auto: api, fall back to pty)
-//   agy-usage --channel daily|prod    Cloud Code host (default: auto-detect)
-//   agy-usage --no-cache      bypass the 5-minute cache
-//   agy-usage --refresh       force a fresh fetch (alias for --no-cache)
-//   agy-usage update [--check]  self-update via npm
-//   agy-usage --version | -v  print the installed version
+//   agy-cli-usage                 one-shot panel (like agy's /usage)
+//   agy-cli-usage --json          machine-readable JSON
+//   agy-cli-usage --watch [secs]  refresh every N seconds (default 60)
+//   agy-cli-usage --source api|pty|auto   data source (default auto: api, fall back to pty)
+//   agy-cli-usage --channel daily|prod    Cloud Code host (default: auto-detect)
+//   agy-cli-usage --no-cache      bypass the 5-minute cache
+//   agy-cli-usage --refresh       force a fresh fetch (alias for --no-cache)
+//   agy-cli-usage update [--check]  self-update via npm
+//   agy-cli-usage --version | -v  print the installed version
 
 import { getAccessToken, CredentialError } from './credentials.js';
 import { fetchQuotaSummary } from './api.js';
@@ -62,16 +62,16 @@ function parseArgs(argv: string[]): CliOptions {
   return o;
 }
 
-const HELP = `agy-usage — Antigravity CLI (agy) usage/quota monitor
+const HELP = `agy-cli-usage — Antigravity CLI (agy) usage/quota monitor
 
-  agy-usage                 one-shot panel
-  agy-usage --json          machine-readable JSON
-  agy-usage --watch [secs]  auto-refresh (default 60s)
-  agy-usage --source <auto|api|pty>
-  agy-usage --channel <auto|daily|prod>
-  agy-usage --no-cache | --refresh
-  agy-usage update [--check]  self-update via npm (--check: report only)
-  agy-usage --version | -v
+  agy-cli-usage                 one-shot panel
+  agy-cli-usage --json          machine-readable JSON
+  agy-cli-usage --watch [secs]  auto-refresh (default 60s)
+  agy-cli-usage --source <auto|api|pty>
+  agy-cli-usage --channel <auto|daily|prod>
+  agy-cli-usage --no-cache | --refresh
+  agy-cli-usage update [--check]  self-update via npm (--check: report only)
+  agy-cli-usage --version | -v
 `;
 
 // --- cache -------------------------------------------------------------------

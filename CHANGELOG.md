@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.2](https://github.com/abruption/agy-cli-usage/compare/v0.4.1...v0.4.2) (2026-06-30)
+
+
+### Bug Fixes
+
+* use canonical binary name agy-cli-usage in --help output ([#27](https://github.com/abruption/agy-cli-usage/issues/27)) ([384fa64](https://github.com/abruption/agy-cli-usage/commit/384fa64aedaef5249a99dc0c2acac9a136d2dcb4))
+
 ## [0.4.1](https://github.com/abruption/agy-cli-usage/compare/v0.4.0...v0.4.1) (2026-06-24)
 
 

@@ -11,7 +11,7 @@
 
 **Headless usage & quota monitor for the Antigravity CLI (`agy`).**
 
-`agy`의 `/usage` 패널(모델 그룹별 주간·5시간 한도, 잔여율, 리프레시 시각)을 **헤드리스로** 조회합니다 — IDE 불필요, macOS · Linux · Windows · 헤드리스 서버 지원.
+Reads `agy`'s `/usage` panel — per–model-group weekly & 5-hour limits, remaining percentage, and refresh times — **headlessly**. No IDE required; works on macOS · Linux · Windows · headless servers.
 
 <sub>Inspired by <a href="https://github.com/skainguyen1412/antigravity-usage">skainguyen1412/antigravity-usage</a> — which targets the Antigravity <b>IDE</b>; this targets the <b>CLI</b> (<code>agy</code>).</sub>
 
@@ -39,89 +39,197 @@
     [██████████████████████████████████████████████████] Quota available
 ```
 
-## 🚀 빠른 시작
+---
+
+# For Human
+
+## What it is
+
+`agy-cli-usage` shows the same usage/quota information as `agy`'s interactive `/usage` slash command, but from a plain shell — one-shot, watch mode, or machine-readable JSON. Use it to keep an eye on your remaining quota, drive a status bar, or feed a dashboard.
+
+## Why
+
+`agy -p "<prompt>"` (headless mode) is a prompt-only path: it does not render TUI slash commands like `/usage`, so usage can't be polled or automated. This tool fills that gap by reading the quota directly (and falling back to driving `agy` in a pseudo-terminal when needed).
+
+## Quick start
 
 ```bash
-# 설치 없이 한 번 실행
+# Run once, no install
 npx agy-cli-usage
 
-# 전역 설치 → 어디서나 `agy-cli-usage`
+# Install globally → `agy-cli-usage` (alias `agy-usage`) anywhere
 npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것. Node.js >= 18.
+> Prerequisites: `agy` is logged in on the same machine, and Node.js >= 18.
 
-## ⚡ 사용법
-
-```bash
-agy-cli-usage                  # /usage 와 동일한 패널 (1회성)
-agy-cli-usage --json           # 머신 리더블 JSON
-agy-cli-usage --watch 60       # 60초 간격 자동 갱신 (5분 캐시 경유)
-agy-cli-usage update [--check] # 자기 업데이트 (--check: 알림만)
-agy-cli-usage --version        # 버전 출력
-```
-
-| 플래그 | 설명 |
-|--------|------|
-| `--json` | 정규화 JSON 출력 (스크립트/대시보드 연동) |
-| `--watch [초]` | N초 간격 갱신 (기본 60) |
-| `--source <auto\|api\|pty>` | 데이터 소스 (기본 `auto`: API → 실패 시 PTY) |
-| `--channel <auto\|daily\|prod>` | Cloud Code 호스트 |
-| `--no-cache` / `--refresh` | 5분 캐시 무시하고 강제 조회 |
-
-## 🤔 왜 필요한가
-
-`agy -p "<prompt>"`(headless)는 LLM 프롬프트 전용이라 `/usage` 같은 TUI 슬래시 커맨드를 렌더링하지 않습니다. 그래서 사용량을 자동화·폴링할 수 없습니다. 이 도구는 그 공백을 메웁니다.
-
-## 🔍 동작 방식
-
-1. **직접 API (기본 · 빠름)** — OS에서 `agy`의 OAuth 토큰을 읽어, `agy`가 시작 시 호출하는 것과 동일한 Cloud Code 내부 API를 직접 호출합니다.
-   - `POST /v1internal:loadCodeAssist` → `cloudaicompanionProject` 획득
-   - `POST /v1internal:retrieveUserQuotaSummary {project}` → 쿼타
-   - 만료 시 OAuth refresh 자동 처리.
-2. **PTY 폴백 (안전망)** — 위 토큰을 못 읽거나 내부 API가 바뀌면, `agy`를 가상 터미널로 띄워 `/usage`를 보내고 `@xterm/headless`로 화면을 재구성해 파싱합니다.
-
-## 🔐 크로스플랫폼 자격증명
-
-토큰은 `agy`가 저장한 위치에서 **읽기만** 합니다. 플랫폼별로 자동 처리:
-
-| OS / 환경 | 저장 위치 | 읽는 방법 |
-|-----------|----------|----------|
-| macOS | Keychain | `@napi-rs/keyring` (폴백 `security`) |
-| Linux 데스크톱 | Secret Service | `@napi-rs/keyring` (폴백 `secret-tool`) |
-| **Windows** | Credential Manager | 내장 `powershell.exe`로 Win32 `CredRead` 호출 |
-| **헤드리스 Linux** | 토큰 파일 | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
-
-읽기 체인: `키링 → OS CLI → Windows credman → 토큰 파일 → PTY`. `AGY_OAUTH_TOKEN_FILE`로 파일 경로 override.
-
-## 🔌 HTTP 엔드포인트 (선택)
+## Usage
 
 ```bash
-PORT=3007 npm run serve      # GET /quota → 정규화 JSON (5분 캐시), GET /healthz
+agy-cli-usage                  # the /usage panel (one-shot)
+agy-cli-usage --json           # machine-readable JSON
+agy-cli-usage --watch 60       # auto-refresh every 60s (via the 5-min cache)
+agy-cli-usage update [--check] # self-update (--check: report only)
+agy-cli-usage --version        # print version
 ```
 
-외부 대시보드/스크립트에서 `GET /quota`로 소비하거나 `agy-cli-usage --json`을 subprocess로 호출하세요.
+| Flag | Description |
+|------|-------------|
+| `--json` | Normalized JSON output (for scripts/dashboards) |
+| `--watch [secs]` | Refresh every N seconds (default 60) |
+| `--source <auto\|api\|pty>` | Data source (default `auto`: API → PTY on failure) |
+| `--channel <auto\|daily\|prod>` | Cloud Code host |
+| `--no-cache` / `--refresh` | Bypass the 5-minute cache |
+| `-h`, `--help` | Show help |
+| `-v`, `--version` | Show version |
 
-## 🛠️ 개발 / 릴리스
+## How it works
 
-TypeScript(strict, ESM)로 작성하고 `tsc`로 `dist/`에 컴파일합니다.
+1. **Direct API (default · fast).** Reads `agy`'s OAuth token from the OS and calls the same internal Cloud Code API that `agy` calls on startup:
+   - `POST /v1internal:loadCodeAssist` → obtains `cloudaicompanionProject`
+   - `POST /v1internal:retrieveUserQuotaSummary {project}` → the quota
+   - Refreshes the OAuth token automatically when expired.
+2. **PTY fallback (safety net).** If the token can't be read or the internal API changes, it launches `agy` in a pseudo-terminal, sends `/usage`, reconstructs the screen with `@xterm/headless`, and parses it.
+
+## Cross-platform credentials
+
+The token is **read only** from wherever `agy` stored it. Handled per platform automatically:
+
+| OS / environment | Storage | How it's read |
+|------------------|---------|---------------|
+| macOS | Keychain | `@napi-rs/keyring` (fallback `security`) |
+| Linux desktop | Secret Service | `@napi-rs/keyring` (fallback `secret-tool`) |
+| **Windows** | Credential Manager | Win32 `CredRead` via built-in `powershell.exe` |
+| **Headless Linux** | token file | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
+
+Read order: `keyring → OS CLI → Windows credman → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
+
+## HTTP endpoint (optional)
 
 ```bash
-npm run build     # tsc → dist/ (컴파일된 JS + .d.ts)
-npm run check     # tsc --noEmit (타입 체크)
-npm test          # 빌드 후 node --test (자격증명·네트워크 불필요, 순수 로직)
+PORT=3007 npm run serve      # GET /quota → normalized JSON (5-min cache), GET /healthz
 ```
 
-- **CI**: push/PR마다 ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.
-- **Release**: [release-please](https://github.com/googleapis/release-please) — Conventional Commits 기반 완전 자동화. main에 머지된 커밋으로 release-please가 **Release PR**(버전 범프 + CHANGELOG)을 유지하고, 그 PR을 머지하면 태그·GitHub Release·`npm publish --provenance`가 자동 실행됩니다.
+Consume `GET /quota` from an external dashboard/script, or call `agy-cli-usage --json` as a subprocess.
 
-## ⚠️ 주의
+## Development & Release
 
-- `v1internal:retrieveUserQuotaSummary`는 **비공개 내부 엔드포인트**입니다. 스키마/호스트가 예고 없이 바뀔 수 있으며, 그때의 안전망이 PTY 폴백입니다. 본인 계정의 사용량 조회 용도로만 사용하세요.
-- 자격증명은 OS 저장소에서 **읽기만** 하며, refresh 토큰을 되쓰지 않아 `agy` 세션과 충돌하지 않습니다.
-- 코드에 포함된 OAuth client_id/secret은 `agy` 바이너리에 들어 있는 **installed-app(public) 값**으로, [Google 문서](https://developers.google.com/identity/protocols/oauth2)상 기밀이 아닙니다. 사용자 식별은 각자의 키링 토큰으로 이뤄집니다.
+Written in TypeScript (strict, ESM) and compiled to `dist/` with `tsc`.
 
-## 📄 License
+```bash
+npm run build     # tsc → dist/ (compiled JS + .d.ts)
+npm run check     # tsc --noEmit (type-check)
+npm test          # build, then node --test (no credentials/network; pure logic)
+```
+
+- **CI**: every push/PR runs the test suite on Ubuntu (Node 18/20/22) + macOS/Windows (Node 22).
+- **Release**: [release-please](https://github.com/googleapis/release-please) — fully automated from Conventional Commits. Merged commits keep a **Release PR** (version bump + CHANGELOG) up to date; merging that PR creates the tag + GitHub Release and runs `npm publish --provenance`.
+
+## Caveats
+
+- `v1internal:retrieveUserQuotaSummary` is a **private, undocumented endpoint**. Its schema/host may change without notice; the PTY fallback is the safety net. Use it only to check your own account's usage.
+- Credentials are **read-only** from the OS store; the refresh token is never written back, so it never conflicts with `agy`'s own session.
+- The OAuth client_id/secret embedded in the code are `agy`'s **installed-app (public)** values — per [Google's docs](https://developers.google.com/identity/protocols/oauth2) these are not treated as secret. Per-user identity comes from your keyring token, not the client_id.
+
+## License
 
 [MIT](LICENSE) © abruption
+
+---
+
+# For Agent (AI)
+
+> Machine-oriented spec for programmatic use. Stable contract: the `--json` snapshot and the `GET /quota` payload share the same shape (`Snapshot`).
+
+## TL;DR
+
+- Binary: `agy-cli-usage` (alias `agy-usage`). Node >= 18. Requires `agy` logged in on the same host.
+- Get structured data: `agy-cli-usage --json` (stdout) or `GET http://127.0.0.1:3007/quota`.
+- Source order in `auto`: direct API first, PTY fallback second. Results cached 5 minutes.
+
+## Commands
+
+| Invocation | Behavior |
+|------------|----------|
+| `agy-cli-usage` | Render the panel to stdout (human format). |
+| `agy-cli-usage --json` | Print the `Snapshot` JSON to stdout, then exit. |
+| `agy-cli-usage --watch [secs]` | Clear screen and re-render every `secs` (min 5, default 60). Runs forever. |
+| `agy-cli-usage --source <auto\|api\|pty>` | `api`: API only (throws on failure). `pty`: PTY only (ignores cache). `auto`: API→PTY. |
+| `agy-cli-usage --channel <auto\|daily\|prod>` | Cloud Code host selection. `auto` tries `daily` then `prod`. |
+| `agy-cli-usage --no-cache` / `--refresh` | Force a fresh fetch (skip the 5-min cache). |
+| `agy-cli-usage update [--check]` | Self-update via `npm i -g`. `--check` reports only. |
+| `agy-cli-usage --version` / `-v` | Print version string to stdout. |
+
+## JSON output (`--json`) — schema
+
+```jsonc
+{
+  "account": "you@gmail.com | null",
+  "tier": "string | null",
+  "fetchedAt": "ISO-8601 timestamp",
+  "source": "api | pty",
+  "host": "cloud code host | null",
+  "note": "string | null",
+  "groups": [
+    {
+      "name": "GEMINI MODELS",
+      "models": "comma-separated model list (may be empty)",
+      "buckets": [
+        {
+          "kind": "weekly | 5h | <other>",
+          "label": "Weekly Limit",
+          "remainingFraction": 0.9172,        // 0..1, or null if unknown
+          "usedFraction": 0.0828,             // 1 - remainingFraction, or null
+          "resetAt": "ISO-8601 | null",
+          "resetsInSeconds": 264180,          // integer seconds, or null
+          "available": false,                 // true iff remainingFraction === 1
+          "description": "string | null"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Notes for parsing:
+- Prefer `remainingFraction` (fraction remaining, 0–1). When `available` is `true`, treat as full quota (the panel shows "Quota available").
+- `resetsInSeconds` is relative to `fetchedAt`; `resetAt` is absolute. Either may be `null`.
+- `kind` is normalized to `weekly` / `5h` where recognized, otherwise the raw window/label string.
+
+## HTTP API (`npm run serve` / `dist/src/server.js`)
+
+| Route | Response |
+|-------|----------|
+| `GET /quota` | `200` `Snapshot` JSON (same shape as `--json`). `?refresh=1` bypasses cache. `502 {"error":...}` on failure. Headers: `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *`. |
+| `GET /healthz` | `200 {"ok":true}` |
+| (other) | `404 {"error":"not found"}` |
+
+Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
+
+## Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `AGY_OAUTH_TOKEN_FILE` | Override the token file path (headless fallback). |
+| `AGY_BIN` | Path to the `agy` binary (PTY source). Else resolved from `PATH`, then `~/.local/bin`. |
+| `XDG_CACHE_HOME` | Cache base dir (cache lives at `<base>/agy-usage/quota.json`; default `~/.cache`). |
+| `NO_COLOR` | Disable ANSI color in the rendered panel. |
+| `PORT` / `HOST` | HTTP server bind (server mode only). |
+
+## Exit codes & errors
+
+- `0` — success.
+- `1` — any error (e.g. `CredentialError` when no token is readable and PTY is unavailable). Error text goes to **stderr**; structured output goes to **stdout**, so `--json` stdout is safe to parse even when stderr carries warnings (e.g. the `[api failed: …] falling back to PTY` notice in `auto` mode).
+- `update` returns the underlying `npm` exit status.
+
+## Data sources & cache
+
+- **Cache**: `<XDG_CACHE_HOME|~/.cache>/agy-usage/quota.json`, TTL **5 minutes**. Avoids hammering the upstream API on `--watch`/polling. Bypassed when `source === 'pty'` or the cache is disabled (`--no-cache`/`--refresh`, or `?refresh=1` on the HTTP route).
+- **API path** reads the token (keyring/file), then calls `loadCodeAssist` → `retrieveUserQuotaSummary`. **PTY path** drives `agy` (`python3 pty` on POSIX, `node-pty` on Windows) and needs `agy` runnable in the environment.
+
+## Integration notes
+
+- For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
+- Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
+- The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.

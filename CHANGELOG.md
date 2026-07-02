@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.3](https://github.com/abruption/agy-cli-usage/compare/v0.4.2...v0.4.3) (2026-07-02)
+
+
+### Bug Fixes
+
+* key the quota cache by source/channel, validate --source/--channel ([#33](https://github.com/abruption/agy-cli-usage/issues/33)) ([19e6860](https://github.com/abruption/agy-cli-usage/commit/19e6860bcf2aa8a547b880a4430027539b4343fb)), closes [#30](https://github.com/abruption/agy-cli-usage/issues/30)
+
 ## [0.4.2](https://github.com/abruption/agy-cli-usage/compare/v0.4.1...v0.4.2) (2026-06-30)
 
 

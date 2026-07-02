@@ -19,9 +19,10 @@ import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
 import { currentVersion, runUpdate } from './update.js';
 import type { Snapshot } from './types.js';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const CACHE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'agy-usage');
 const CACHE_FILE = join(CACHE_DIR, 'quota.json');
@@ -39,9 +40,13 @@ export interface CliOptions {
   help?: boolean;
 }
 
+const VALID_SOURCES = ['auto', 'api', 'pty'] as const;
+const VALID_CHANNELS = ['auto', 'daily', 'prod'] as const;
+
 const errMessage = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
-function parseArgs(argv: string[]): CliOptions {
+/** Exported for direct unit testing (no process.argv/exit side effects). */
+export function parseArgs(argv: string[]): CliOptions {
   const o: CliOptions = {
     json: false, watch: null, source: 'auto', channel: 'auto', cache: true, command: null, check: false,
   };
@@ -52,9 +57,19 @@ function parseArgs(argv: string[]): CliOptions {
     else if (a === '--watch') {
       const n = Number(argv[i + 1]);
       if (Number.isFinite(n)) { o.watch = n; i++; } else o.watch = 60;
-    } else if (a === '--source') o.source = (argv[++i] ?? 'auto') as CliOptions['source'];
-    else if (a === '--channel') o.channel = (argv[++i] ?? 'auto') as CliOptions['channel'];
-    else if (a === '--no-cache' || a === '--refresh') o.cache = false;
+    } else if (a === '--source') {
+      const v = argv[++i];
+      if (!(VALID_SOURCES as readonly string[]).includes(v)) {
+        throw new Error(`invalid --source '${v}' — expected one of: ${VALID_SOURCES.join(', ')}`);
+      }
+      o.source = v as CliOptions['source'];
+    } else if (a === '--channel') {
+      const v = argv[++i];
+      if (!(VALID_CHANNELS as readonly string[]).includes(v)) {
+        throw new Error(`invalid --channel '${v}' — expected one of: ${VALID_CHANNELS.join(', ')}`);
+      }
+      o.channel = v as CliOptions['channel'];
+    } else if (a === '--no-cache' || a === '--refresh') o.cache = false;
     else if (a === '--check') o.check = true;
     else if (a === '-v' || a === '--version') o.version = true;
     else if (a === '-h' || a === '--help') o.help = true;
@@ -76,20 +91,47 @@ const HELP = `agy-cli-usage — Antigravity CLI (agy) usage/quota monitor
 
 // --- cache -------------------------------------------------------------------
 
-function readCache(): Snapshot | null {
+/**
+ * Cached alongside the snapshot: the `source`/`channel` that produced it.
+ * Without this, a cache hit from e.g. `--source auto` falling back to PTY
+ * would be silently returned to a later `--source api` call within the TTL
+ * window (never calling the API, never throwing) — directly contradicting
+ * the documented `api: API only (throws on failure)` contract. Requiring an
+ * exact match keys the cache by *request mode*, not just time.
+ */
+interface CacheEntry {
+  ts: number;
+  source: SnapshotOptions['source'];
+  channel: SnapshotOptions['channel'];
+  snap: Snapshot;
+}
+
+/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
+export function readCache(
+  source: SnapshotOptions['source'],
+  channel: SnapshotOptions['channel'],
+  cacheFile: string = CACHE_FILE,
+): Snapshot | null {
   try {
-    const { ts, snap } = JSON.parse(readFileSync(CACHE_FILE, 'utf8')) as { ts: number; snap: Snapshot };
-    if (Date.now() - ts < CACHE_TTL_MS) return snap;
+    const entry = JSON.parse(readFileSync(cacheFile, 'utf8')) as CacheEntry;
+    if (entry.source !== source || entry.channel !== channel) return null;
+    if (Date.now() - entry.ts < CACHE_TTL_MS) return entry.snap;
   } catch {
-    /* no/expired cache */
+    /* no/expired/incompatible-format cache */
   }
   return null;
 }
 
-function writeCache(snap: Snapshot): void {
+/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
+export function writeCache(
+  snap: Snapshot,
+  source: SnapshotOptions['source'],
+  channel: SnapshotOptions['channel'],
+  cacheFile: string = CACHE_FILE,
+): void {
   try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify({ ts: Date.now(), snap }));
+    mkdirSync(dirname(cacheFile), { recursive: true });
+    writeFileSync(cacheFile, JSON.stringify({ ts: Date.now(), source, channel, snap } satisfies CacheEntry));
   } catch {
     /* cache is best-effort */
   }
@@ -102,11 +144,13 @@ export interface SnapshotOptions {
   source: 'auto' | 'api' | 'pty';
   channel: 'auto' | 'daily' | 'prod';
   cache: boolean;
+  /** Override the cache file path — for tests only; defaults to the real user cache. */
+  cacheFile?: string;
 }
 
 export async function getSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   if (opts.cache && opts.source !== 'pty') {
-    const cached = readCache();
+    const cached = readCache(opts.source, opts.channel, opts.cacheFile);
     if (cached) return cached;
   }
 
@@ -125,7 +169,7 @@ export async function getSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
       snap = fromPty(await captureUsageViaPty());
     }
   }
-  writeCache(snap);
+  writeCache(snap, opts.source, opts.channel, opts.cacheFile);
   return snap;
 }
 
@@ -160,11 +204,28 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err: unknown) => {
-  if (err instanceof CredentialError) {
-    process.stderr.write(`credential error: ${err.message}\n`);
-  } else {
-    process.stderr.write(`error: ${errMessage(err)}\n`);
+// Only run the CLI when this file is executed directly (as the `bin` entry
+// point) — guarded so parseArgs/readCache/writeCache/etc. can be imported
+// for unit testing without triggering a full live CLI run (network calls,
+// process.exit()) as an import side effect. realpathSync resolves symlinks
+// on process.argv[1] (npm global `bin` entries are frequently symlinks);
+// import.meta.url is already symlink-resolved by Node's ESM loader.
+function isMainModule(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    return fileURLToPath(import.meta.url) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
   }
-  process.exit(1);
-});
+}
+
+if (isMainModule()) {
+  main().catch((err: unknown) => {
+    if (err instanceof CredentialError) {
+      process.stderr.write(`credential error: ${err.message}\n`);
+    } else {
+      process.stderr.write(`error: ${errMessage(err)}\n`);
+    }
+    process.exit(1);
+  });
+}

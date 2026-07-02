@@ -3,12 +3,16 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { fromApi, fromPty, formatDuration } from '../src/quota.js';
 import { parsePanel } from '../src/pty-fallback.js';
 import { renderPanel } from '../src/render.js';
 import { decodeSecret } from '../src/credentials.js';
 import { semverCompare, currentVersion } from '../src/update.js';
+import { parseArgs, readCache, writeCache } from '../src/main.js';
 import { SAMPLE_QUOTA_RESPONSE, SAMPLE_PANEL_TEXT, NOW_MS } from './fixtures.js';
 
 test('semverCompare orders versions numerically', () => {
@@ -114,4 +118,71 @@ test('renderPanel produces a non-empty panel with expected markers', () => {
   assert.match(out, /GEMINI MODELS/);
   assert.match(out, /Quota available/);
   assert.match(out, /Weekly Limit/);
+});
+
+// --- main.ts: parseArgs --------------------------------------------------
+
+test('parseArgs accepts every documented --source/--channel value', () => {
+  assert.equal(parseArgs(['--source', 'auto']).source, 'auto');
+  assert.equal(parseArgs(['--source', 'api']).source, 'api');
+  assert.equal(parseArgs(['--source', 'pty']).source, 'pty');
+  assert.equal(parseArgs(['--channel', 'auto']).channel, 'auto');
+  assert.equal(parseArgs(['--channel', 'daily']).channel, 'daily');
+  assert.equal(parseArgs(['--channel', 'prod']).channel, 'prod');
+});
+
+test('parseArgs rejects an unrecognized --source instead of silently behaving like "auto"', () => {
+  assert.throws(() => parseArgs(['--source', 'bogus']), /invalid --source 'bogus'/);
+});
+
+test('parseArgs rejects an unrecognized --channel instead of silently falling through to all hosts', () => {
+  assert.throws(() => parseArgs(['--channel', 'bogus']), /invalid --channel 'bogus'/);
+});
+
+// --- main.ts: cache (readCache/writeCache) --------------------------------
+
+function withTmpCacheFile(t: { after: (fn: () => void) => void }): string {
+  const dir = mkdtempSync(join(tmpdir(), 'agy-usage-cache-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return join(dir, 'quota.json');
+}
+
+function sampleSnapshot(source: 'api' | 'pty') {
+  const snap = fromApi({ raw: SAMPLE_QUOTA_RESPONSE, host: 'h', account: 'a@b.com', tier: 'free-tier' }, NOW_MS);
+  return { ...snap, source };
+}
+
+test('readCache returns null when no cache file exists yet', (t) => {
+  const cacheFile = withTmpCacheFile(t);
+  assert.equal(readCache('auto', 'auto', cacheFile), null);
+});
+
+test('writeCache + readCache round-trips when source and channel match', (t) => {
+  const cacheFile = withTmpCacheFile(t);
+  const snap = sampleSnapshot('api');
+  writeCache(snap, 'api', 'daily', cacheFile);
+  const hit = readCache('api', 'daily', cacheFile);
+  assert.ok(hit);
+  assert.equal(hit!.account, snap.account);
+});
+
+test('readCache misses when the requested source differs from the cached source (regression: cross-mode stale data)', (t) => {
+  const cacheFile = withTmpCacheFile(t);
+  // Simulates: `--source auto` fell back to PTY and cached a pty-sourced
+  // snapshot; a later `--source api` call must NOT silently reuse it —
+  // it must miss and go hit the real API (or throw, per the `api` contract).
+  writeCache(sampleSnapshot('pty'), 'auto', 'auto', cacheFile);
+  assert.equal(readCache('api', 'auto', cacheFile), null);
+});
+
+test('readCache misses when the requested channel differs from the cached channel', (t) => {
+  const cacheFile = withTmpCacheFile(t);
+  writeCache(sampleSnapshot('api'), 'api', 'daily', cacheFile);
+  assert.equal(readCache('api', 'prod', cacheFile), null);
+});
+
+test('readCache misses on a pre-existing cache file in the old (source/channel-less) format', (t) => {
+  const cacheFile = withTmpCacheFile(t);
+  writeFileSync(cacheFile, JSON.stringify({ ts: Date.now(), snap: sampleSnapshot('api') }));
+  assert.equal(readCache('auto', 'auto', cacheFile), null);
 });

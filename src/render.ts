@@ -19,8 +19,16 @@ function barColor(remaining: number | null): string {
   return '31'; // red
 }
 
+// Clamp to [0,1] — remainingFraction comes from an undocumented private
+// endpoint (or PTY-parsed text), so an out-of-range value must not be shown
+// as-is. Shared by the bar and the percentage text so they never disagree
+// (e.g. bar capped at 100% while the text next to it reads "150.00%").
+function clampFraction(remainingFraction: number | null): number | null {
+  return remainingFraction == null ? null : Math.max(0, Math.min(1, remainingFraction));
+}
+
 function bar(remainingFraction: number | null): string {
-  const frac = remainingFraction == null ? 0 : Math.max(0, Math.min(1, remainingFraction));
+  const frac = clampFraction(remainingFraction) ?? 0;
   const filled = Math.round(frac * BAR_WIDTH);
   const body = '█'.repeat(filled) + '░'.repeat(BAR_WIDTH - filled);
   return useColor() ? `\x1b[${barColor(remainingFraction)}m${body}\x1b[0m` : body;
@@ -32,8 +40,9 @@ function bucketLine(b: Bucket): string {
   if (b.available) {
     lines.push(`    [${bar(1)}] ${c('32', 'Quota available')}`);
   } else {
-    const pct = b.remainingFraction == null ? '—' : `${(b.remainingFraction * 100).toFixed(2)}%`;
-    const remainPct = b.remainingFraction == null ? '' : `${Math.round(b.remainingFraction * 100)}% remaining`;
+    const clamped = clampFraction(b.remainingFraction);
+    const pct = clamped == null ? '—' : `${(clamped * 100).toFixed(2)}%`;
+    const remainPct = clamped == null ? '' : `${Math.round(clamped * 100)}% remaining`;
     const dur = formatDuration(b.resetsInSeconds);
     const reset = dur ? ` · ${dim(`Refreshes in ${dur}`)}` : '';
     lines.push(`    [${bar(b.remainingFraction)}] ${pct}`);

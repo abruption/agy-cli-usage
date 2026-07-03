@@ -131,6 +131,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 ## 주의
 
 - `v1internal:retrieveUserQuotaSummary`는 **비공개·비문서 내부 엔드포인트**입니다. 스키마/호스트가 예고 없이 바뀔 수 있으며, 그때의 안전망이 PTY 폴백입니다. 본인 계정의 사용량 조회 용도로만 사용하세요.
+- **최상위 티어 구독자는 API 경로에서 `account`가 `null`입니다.** API 경로는 `loadCodeAssist` 응답의 `currentTier.upgradeSubscriptionUri`에 붙은 `Email=` 파라미터에서 계정 이메일을 추출하는데, 이미 최상위 티어인 계정은 "업그레이드" URL 자체가 없어 추출할 대상이 없습니다. 이는 비공개 엔드포인트의 알려진 제약이며, `--source pty`(agy 자체가 렌더링한 `/usage` 패널에서 `Account: …`를 직접 읽어오므로 영향받지 않음) 외에는 다른 우회 플래그가 없습니다.
 - 자격증명은 OS 저장소에서 **읽기만** 하며, refresh 토큰을 되쓰지 않아 `agy` 세션과 충돌하지 않습니다.
 - 코드에 포함된 OAuth client_id/secret은 `agy` 바이너리의 **installed-app(public)** 값으로, [Google 문서](https://developers.google.com/identity/protocols/oauth2)상 기밀이 아닙니다. 사용자 식별은 각자의 키링 토큰으로 이뤄집니다.
 
@@ -198,6 +199,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - `remainingFraction`(잔여 비율 0–1)을 우선 사용. `available`이 `true`면 풀 쿼타로 간주(패널은 "Quota available" 표시).
 - `resetsInSeconds`는 `fetchedAt` 기준 상대값, `resetAt`은 절대값. 둘 다 `null` 가능.
 - `kind`는 인식 시 `weekly`/`5h`로 정규화, 아니면 원본 window/label 문자열.
+- `"source": "api"`로 성공한 응답에서도 `account`가 `null`일 수 있습니다 — 위 주의 섹션 참고(최상위 티어 구독자는 API 경로에 이메일 소스가 없음). 계정 이메일이 반드시 필요하면 `--source pty` 또는 PTY 기반 스냅샷을 사용하세요.
 
 ## HTTP API (`npm run serve` / `dist/src/server.js`)
 

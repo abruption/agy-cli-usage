@@ -10,10 +10,17 @@ import { join } from 'node:path';
 import { fromApi, fromPty, formatDuration } from '../src/quota.js';
 import { parsePanel } from '../src/pty-fallback.js';
 import { renderPanel } from '../src/render.js';
-import { decodeSecret } from '../src/credentials.js';
-import { semverCompare, currentVersion } from '../src/update.js';
+import { decodeSecret, CredentialError } from '../src/credentials.js';
+import {
+  semverCompare,
+  currentVersion,
+  latestVersion,
+  NPM_VIEW_TIMEOUT_MS,
+  REGISTRY_FETCH_TIMEOUT_MS,
+} from '../src/update.js';
 import { parseArgs, readCache, writeCache } from '../src/main.js';
 import { createApp } from '../src/server.js';
+import { buildUserAgent, ApiError } from '../src/api.js';
 import type { Snapshot } from '../src/types.js';
 import { SAMPLE_QUOTA_RESPONSE, SAMPLE_PANEL_TEXT, NOW_MS } from './fixtures.js';
 
@@ -27,6 +34,69 @@ test('semverCompare orders versions numerically', () => {
 
 test('currentVersion reads a valid semver from package.json', () => {
   assert.match(currentVersion(), /^\d+\.\d+\.\d+/);
+});
+
+// --- api.ts: User-Agent + ApiError -------------------------------------------
+
+test('buildUserAgent uses the real package name/version, not a stale hardcoded string', () => {
+  const ua = buildUserAgent();
+  assert.match(ua, new RegExp(`^agy-cli-usage/${currentVersion().replace(/\./g, '\\.')} `));
+  assert.doesNotMatch(ua, /antigravity-usage-monitor/);
+  assert.match(ua, new RegExp(`${process.platform}/${process.arch}$`));
+});
+
+test('ApiError sets .name so it does not log as a generic Error', () => {
+  const err = new ApiError('boom', 500);
+  assert.equal(err.name, 'ApiError');
+  assert.equal(err.status, 500);
+  assert.match(String(err), /^ApiError: boom$/);
+});
+
+// --- credentials.ts: CredentialError -----------------------------------------
+
+test('CredentialError sets .name so it does not log as a generic Error', () => {
+  const err = new CredentialError('no token');
+  assert.equal(err.name, 'CredentialError');
+  assert.match(String(err), /^CredentialError: no token$/);
+});
+
+// --- update.ts: latestVersion timeouts ---------------------------------------
+
+test('latestVersion timeout constants are bounded (not instant, not unbounded)', () => {
+  assert.ok(NPM_VIEW_TIMEOUT_MS >= 3_000 && NPM_VIEW_TIMEOUT_MS <= 15_000);
+  assert.ok(REGISTRY_FETCH_TIMEOUT_MS >= 3_000 && REGISTRY_FETCH_TIMEOUT_MS <= 15_000);
+});
+
+test('latestVersion returns the npm-view result when it succeeds, never touching the registry fallback', async () => {
+  const v = await latestVersion({
+    execNpmView: () => '9.9.9',
+    fetchRegistry: () => { throw new Error('should not be called'); },
+  });
+  assert.equal(v, '9.9.9');
+});
+
+test('latestVersion falls back to the registry fetch when npm view times out', async () => {
+  const v = await latestVersion({
+    execNpmView: () => {
+      const e = new Error('command timed out') as Error & { code: string };
+      e.code = 'ETIMEDOUT';
+      throw e;
+    },
+    fetchRegistry: async () => new Response(JSON.stringify({ version: '8.8.8' }), { status: 200 }),
+  });
+  assert.equal(v, '8.8.8');
+});
+
+test('latestVersion resolves to null (not hanging or throwing) when both npm view and the registry fetch time out', async () => {
+  const v = await latestVersion({
+    execNpmView: () => {
+      throw new Error('ETIMEDOUT');
+    },
+    fetchRegistry: async () => {
+      throw new DOMException('The operation was aborted', 'TimeoutError');
+    },
+  });
+  assert.equal(v, null);
 });
 
 const TOKEN_JSON = {
@@ -275,6 +345,26 @@ test('renderPanel wraps a long note across multiple prefixed lines', () => {
   for (const word of longNote.split(/\s+/)) {
     assert.ok(rejoined.includes(word), `expected wrapped output to contain "${word}"`);
   }
+});
+
+test('renderPanel shows no cache indicator when rendered right after fetching', () => {
+  const snap = fromApi({ raw: SAMPLE_QUOTA_RESPONSE, host: 'h', account: 'a@b.com', tier: 'free-tier' }, NOW_MS);
+  const out = renderPanel(snap, NOW_MS); // rendered at the same instant it was fetched
+  assert.doesNotMatch(out, /cached/);
+});
+
+test('renderPanel surfaces a "(cached, refreshed Ns ago)" note when a --watch tick re-renders a cache hit', () => {
+  const snap = fromApi({ raw: SAMPLE_QUOTA_RESPONSE, host: 'h', account: 'a@b.com', tier: 'free-tier' }, NOW_MS);
+  // Simulate a --watch tick 45s later that hit the 5-minute cache instead of
+  // fetching fresh data — fetchedAt (baked into the cached snapshot) stays put.
+  const out = renderPanel(snap, NOW_MS + 45_000);
+  assert.match(out, /\(cached, refreshed 45s ago\)/);
+});
+
+test('renderPanel formats a multi-minute cache age with minutes and seconds', () => {
+  const snap = fromApi({ raw: SAMPLE_QUOTA_RESPONSE, host: 'h', account: 'a@b.com', tier: 'free-tier' }, NOW_MS);
+  const out = renderPanel(snap, NOW_MS + 4 * 60_000 + 12_000); // 4m12s later
+  assert.match(out, /\(cached, refreshed 4m 12s ago\)/);
 });
 
 // --- server.ts: HTTP routing (createApp with an injected snapshot fetcher) ---

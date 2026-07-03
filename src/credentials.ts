@@ -38,7 +38,12 @@ const KEYRING_SERVICE = 'gemini';
 const KEYRING_ACCOUNT = 'antigravity';
 const B64_PREFIX = 'go-keyring-base64:';
 
-class CredentialError extends Error {}
+class CredentialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CredentialError';
+  }
+}
 
 interface Cred {
   accessToken: string;

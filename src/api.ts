@@ -10,8 +10,14 @@
 // the PTY fallback exists for when it changes.
 
 import type { FetchResult, RawQuotaResponse } from './types.js';
+import { currentVersion } from './update.js';
 
-const UA = `antigravity-usage-monitor/0.1 ${process.platform}/${process.arch}`;
+/** Exported for direct unit testing — keeps the UA tied to the real package name/version. */
+export function buildUserAgent(): string {
+  return `agy-cli-usage/${currentVersion()} ${process.platform}/${process.arch}`;
+}
+
+const UA = buildUserAgent();
 
 // Antigravity ships against the "daily" Cloud Code host; stable builds use the
 // plain host. Try daily first (matches current CLI), fall back to prod.
@@ -21,6 +27,7 @@ class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
     super(message);
+    this.name = 'ApiError';
     this.status = status;
   }
 }

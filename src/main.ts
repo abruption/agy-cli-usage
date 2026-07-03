@@ -87,6 +87,15 @@ const HELP = `agy-cli-usage — Antigravity CLI (agy) usage/quota monitor
   agy-cli-usage --no-cache | --refresh
   agy-cli-usage update [--check]  self-update via npm (--check: report only)
   agy-cli-usage --version | -v
+
+Environment variables:
+  AGY_OAUTH_TOKEN_FILE  Override the token file path (headless fallback).
+  AGY_BIN               Path to the agy binary (PTY source). Else resolved from
+                        PATH, then ~/.local/bin.
+  XDG_CACHE_HOME        Cache base dir (cache lives at
+                        <base>/agy-usage/quota.json; default ~/.cache).
+  NO_COLOR              Disable ANSI color in the rendered panel.
+  PORT / HOST           HTTP server bind (server mode only).
 `;
 
 // --- cache -------------------------------------------------------------------

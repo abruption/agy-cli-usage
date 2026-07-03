@@ -51,13 +51,41 @@ function bucketLine(b: Bucket): string {
   return lines.join('\n');
 }
 
-/** Returns the full panel as a string. */
-export function renderPanel(snap: Snapshot): string {
+// `--watch`'s default interval (60s) is faster than the 5-minute quota cache
+// TTL, so most refreshes just re-render a cached snapshot with no visual
+// sign the fetch didn't actually happen. `fetchedAt` is set once, when the
+// data was truly fetched (see quota.ts), and carried through untouched on a
+// cache hit — so comparing it to "now" at render time is enough to tell the
+// two cases apart without threading extra state through Snapshot/the cache.
+// A small skew is tolerated so a genuinely fresh fetch isn't mislabeled
+// "cached" just because rendering happened slightly after fetching.
+const FRESHNESS_SKEW_MS = 3_000;
+
+function formatAge(totalSeconds: number): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  if (s < 60) return `${s}s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s % 60}s`;
+}
+
+function freshnessSuffix(fetchedAt: string, nowMs: number): string {
+  const ageMs = nowMs - new Date(fetchedAt).getTime();
+  if (!Number.isFinite(ageMs) || ageMs < FRESHNESS_SKEW_MS) return '';
+  return dim(` (cached, refreshed ${formatAge(ageMs / 1000)} ago)`);
+}
+
+/** Returns the full panel as a string. `nowMs` is injectable for testing. */
+export function renderPanel(snap: Snapshot, nowMs: number = Date.now()): string {
   const out: string[] = [];
   out.push('');
   out.push(bold('  Models & Quota'));
   if (snap.account) out.push(`  ${dim('Account:')} ${snap.account}`);
-  out.push(`  ${dim(`source: ${snap.source}${snap.host ? ` · ${snap.host}` : ''} · ${snap.fetchedAt}`)}`);
+  out.push(
+    `  ${dim(`source: ${snap.source}${snap.host ? ` · ${snap.host}` : ''} · ${snap.fetchedAt}`)}` +
+      freshnessSuffix(snap.fetchedAt, nowMs),
+  );
   out.push('');
 
   for (const g of snap.groups) {

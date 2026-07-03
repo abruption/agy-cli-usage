@@ -41,22 +41,47 @@ export function semverCompare(a: string, b: string): number {
   return 0;
 }
 
+// Both the `npm view` child process and the registry fetch fallback are
+// bounded so a slow/unreachable registry can't hang the update check
+// indefinitely — a timed-out attempt is treated the same as "unavailable"
+// and falls through to the next strategy (or to `latestVersion` returning
+// null, which `runUpdate` reports as "could not determine the latest version").
+export const NPM_VIEW_TIMEOUT_MS = 8_000;
+export const REGISTRY_FETCH_TIMEOUT_MS = 8_000;
+
+/** Exported for direct unit testing via injection — not part of the public surface. */
+export interface LatestVersionDeps {
+  execNpmView?: (pkgName: string, timeoutMs: number) => string;
+  fetchRegistry?: (pkgName: string, timeoutMs: number) => Promise<Response>;
+}
+
+function defaultExecNpmView(pkgName: string, timeoutMs: number): string {
+  return execFileSync('npm', ['view', pkgName, 'version'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    timeout: timeoutMs,
+  });
+}
+
+function defaultFetchRegistry(pkgName: string, timeoutMs: number): Promise<Response> {
+  return fetch(`https://registry.npmjs.org/${pkgName}/latest`, { signal: AbortSignal.timeout(timeoutMs) });
+}
+
 /** Latest published version: prefer the user's configured registry (npm view), fall back to public. */
-export async function latestVersion(): Promise<string | null> {
+export async function latestVersion(deps: LatestVersionDeps = {}): Promise<string | null> {
+  const execNpmView = deps.execNpmView ?? defaultExecNpmView;
+  const fetchRegistry = deps.fetchRegistry ?? defaultFetchRegistry;
   try {
-    const out = execFileSync('npm', ['view', PKG_NAME, 'version'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    const out = execNpmView(PKG_NAME, NPM_VIEW_TIMEOUT_MS).trim();
     if (out) return out;
   } catch {
-    // npm missing or offline — try the public registry directly
+    // npm missing, offline, or timed out — try the public registry directly
   }
   try {
-    const res = await fetch(`https://registry.npmjs.org/${PKG_NAME}/latest`);
+    const res = await fetchRegistry(PKG_NAME, REGISTRY_FETCH_TIMEOUT_MS);
     if (res.ok) return ((await res.json()) as { version: string }).version;
   } catch {
-    // offline
+    // offline or timed out
   }
   return null;
 }

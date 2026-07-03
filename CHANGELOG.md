@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.4](https://github.com/abruption/agy-cli-usage/compare/v0.4.3...v0.4.4) (2026-07-03)
+
+
+### Bug Fixes
+
+* PTY cleanup, duration parsing, email extraction, render clamping, test coverage ([#35](https://github.com/abruption/agy-cli-usage/issues/35)) ([de886a2](https://github.com/abruption/agy-cli-usage/commit/de886a2a5fdf9c7777f485fd94eab0f1a13d215f))
+
 ## [0.4.3](https://github.com/abruption/agy-cli-usage/compare/v0.4.2...v0.4.3) (2026-07-02)
 
 

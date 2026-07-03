@@ -13,7 +13,7 @@
 // a delay and the session is held open long enough to render.
 
 import { spawn } from 'node:child_process';
-import { writeFileSync, readFileSync, mkdtempSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdtempSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
 import type { BucketKind, ParsedBucket, ParsedGroup, ParsedPanel } from './types.js';
@@ -71,12 +71,16 @@ async function captureViaNodePty(): Promise<Buffer | null> {
 
 async function captureViaPython(): Promise<Buffer | null> {
   if (process.platform === 'win32') return null;
+  // Cleaned up in `finally` below regardless of success/failure so repeated
+  // `--watch` runs or repeated fallback triggers don't leak a directory per
+  // capture (each holds a helper script + the captured PTY bytes).
   const dir = mkdtempSync(join(tmpdir(), 'agy-usage-'));
-  const helper = join(dir, 'drive.py');
-  const outFile = join(dir, 'out.bin');
-  writeFileSync(
-    helper,
-    `import os, pty, time, select, signal, struct, fcntl, termios
+  try {
+    const helper = join(dir, 'drive.py');
+    const outFile = join(dir, 'out.bin');
+    writeFileSync(
+      helper,
+      `import os, pty, time, select, signal, struct, fcntl, termios
 AGY = ${JSON.stringify(AGY_BIN)}
 out = open(${JSON.stringify(outFile)}, "wb")
 pid, fd = pty.fork()
@@ -101,14 +105,17 @@ try: os.kill(pid, signal.SIGTERM)
 except Exception: pass
 out.close()
 `,
-  );
-  return new Promise<Buffer | null>((resolve) => {
-    const proc = spawn('python3', [helper], { stdio: 'ignore' });
-    proc.on('error', () => resolve(null));
-    proc.on('exit', () => {
-      try { resolve(readFileSync(outFile)); } catch { resolve(null); }
+    );
+    return await new Promise<Buffer | null>((resolve) => {
+      const proc = spawn('python3', [helper], { stdio: 'ignore' });
+      proc.on('error', () => resolve(null));
+      proc.on('exit', () => {
+        try { resolve(readFileSync(outFile)); } catch { resolve(null); }
+      });
     });
-  });
+  } finally {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
+  }
 }
 
 // --- VT reconstruction --------------------------------------------------------
@@ -132,7 +139,11 @@ async function reconstructScreen(raw: Buffer): Promise<string> {
 
 function parseDuration(text: string): number | null {
   let seconds = 0;
-  const d = text.match(/(\d+)\s*day/i);
+  // Matches both the spelled-out form ("3 days", "1 day") and the abbreviated
+  // form ("3d") that agy's panel may render instead — without the `\b`
+  // fallback, only "day"/"days" was recognized and a bare "3d 2h" silently
+  // dropped the day component.
+  const d = text.match(/(\d+)\s*d(?:ays?)?\b/i);
   const h = text.match(/(\d+)\s*h(?:our)?/i);
   const m = text.match(/(\d+)\s*m(?:in)?/i);
   if (d) seconds += +d[1] * 86400;

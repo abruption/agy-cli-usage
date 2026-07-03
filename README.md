@@ -131,6 +131,7 @@ npm test          # build, then node --test (no credentials/network; pure logic)
 ## Caveats
 
 - `v1internal:retrieveUserQuotaSummary` is a **private, undocumented endpoint**. Its schema/host may change without notice; the PTY fallback is the safety net. Use it only to check your own account's usage.
+- **`account` is `null` via the API path for top-tier subscribers.** The API path derives the account email from the `Email=` param on `currentTier.upgradeSubscriptionUri` in the `loadCodeAssist` response — accounts already on the top tier have no "upgrade" URL, so there's nothing to extract from. This is a known limitation of the undocumented endpoint, not a bug you can work around via flags other than `--source pty`, which reads `Account: …` straight off agy's own rendered `/usage` panel and isn't affected.
 - Credentials are **read-only** from the OS store; the refresh token is never written back, so it never conflicts with `agy`'s own session.
 - The OAuth client_id/secret embedded in the code are `agy`'s **installed-app (public)** values — per [Google's docs](https://developers.google.com/identity/protocols/oauth2) these are not treated as secret. Per-user identity comes from your keyring token, not the client_id.
 
@@ -198,6 +199,7 @@ Notes for parsing:
 - Prefer `remainingFraction` (fraction remaining, 0–1). When `available` is `true`, treat as full quota (the panel shows "Quota available").
 - `resetsInSeconds` is relative to `fetchedAt`; `resetAt` is absolute. Either may be `null`.
 - `kind` is normalized to `weekly` / `5h` where recognized, otherwise the raw window/label string.
+- `account` may be `null` even on a successful `"source": "api"` response — see the Caveats section above (top-tier subscribers have no email source in the API path). Use `--source pty` / a PTY-sourced snapshot if you need the account email reliably.
 
 ## HTTP API (`npm run serve` / `dist/src/server.js`)
 

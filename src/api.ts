@@ -35,6 +35,16 @@ export interface FetchOptions {
   channel?: 'daily' | 'prod';
 }
 
+// Known limitation: this is the only email source `loadCodeAssist` exposes —
+// the `Email=` query param on `currentTier.upgradeSubscriptionUri`. Accounts
+// already on the top tier have nothing left to upgrade to, so that URI (and
+// therefore `account`) is `null` for them via the API path even though the
+// PTY path can still show `Account: …` (it reads it straight off agy's own
+// rendered panel, which has an in-app session it can draw on that this
+// unauthenticated-beyond-the-token API response doesn't provide). There is no
+// alternative email field in either `loadCodeAssist` or
+// `retrieveUserQuotaSummary` today — see README Caveats. Use `--source pty`
+// if you need the account email for a top-tier subscriber.
 function extractEmail(uri: string | undefined): string | null {
   const m = uri?.match(/[?&]Email=([^&]+)/);
   if (!m) return null;

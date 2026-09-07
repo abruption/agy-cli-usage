@@ -107,6 +107,8 @@ The token is **read only** from wherever `agy` stored it. Handled per platform a
 
 Read order: `keyring → OS CLI → Windows credman → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
 
+Token files are tried in order: `AGY_OAUTH_TOKEN_FILE`, then `~/.gemini/antigravity-cli/antigravity-oauth-token`, then `~/.gemini/jetski-standalone-oauth-token`. The last one is checked only after every keyring backend has failed — on macOS it sits beside the Keychain entry and can hold an older grant from a different session, so it must not win over a working one.
+
 ## HTTP endpoint (optional)
 
 ```bash

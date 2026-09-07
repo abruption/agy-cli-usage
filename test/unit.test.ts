@@ -38,10 +38,18 @@ test('currentVersion reads a valid semver from package.json', () => {
 
 // --- api.ts: User-Agent + ApiError -------------------------------------------
 
-test('buildUserAgent uses the real package name/version, not a stale hardcoded string', () => {
+test('buildUserAgent keeps the "antigravity" substring the quota API gates on (regression: #47)', () => {
+  // Load-bearing, not cosmetic. Cloud Code picks the product off the User-Agent:
+  // drop this substring and loadCodeAssist answers HTTP 200 with no
+  // cloudaicompanionProject, leaving retrieveUserQuotaSummary unreachable.
+  // v0.4.5 shipped without it and the whole API path was dead.
+  assert.match(buildUserAgent(), /antigravity/i);
+});
+
+test('buildUserAgent stays tied to the real package version and platform, not a stale hardcoded string', () => {
   const ua = buildUserAgent();
-  assert.match(ua, new RegExp(`^agy-cli-usage/${currentVersion().replace(/\./g, '\\.')} `));
-  assert.doesNotMatch(ua, /antigravity-usage-monitor/);
+  assert.match(ua, new RegExp(`/${currentVersion().replace(/\./g, '\\.')} `));
+  assert.doesNotMatch(ua, /\/0\.1 /); // the old hardcoded version, frozen while the package moved on
   assert.match(ua, new RegExp(`${process.platform}/${process.arch}$`));
 });
 
@@ -50,6 +58,15 @@ test('ApiError sets .name so it does not log as a generic Error', () => {
   assert.equal(err.name, 'ApiError');
   assert.equal(err.status, 500);
   assert.match(String(err), /^ApiError: boom$/);
+});
+
+test('ApiError separates a rejected token (401) from a missing license (403)', () => {
+  // Only one of these is fixed by signing in again, so they must not collapse
+  // into one "auth error" message.
+  assert.equal(new ApiError('unauthenticated', 401).kind, 'unauthorized');
+  assert.equal(new ApiError('no valid license of this product', 403).kind, 'not-entitled');
+  assert.equal(new ApiError('server blew up', 500).kind, 'http');
+  assert.equal(new ApiError('no project', 0, 'no-project').kind, 'no-project');
 });
 
 // --- credentials.ts: CredentialError -----------------------------------------

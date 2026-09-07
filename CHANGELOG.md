@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.6](https://github.com/abruption/agy-cli-usage/compare/v0.4.5...v0.4.6) (2026-09-07)
+
+
+### Bug Fixes
+
+* restore the "antigravity" User-Agent the quota API gates on ([#48](https://github.com/abruption/agy-cli-usage/issues/48)) ([c375d5a](https://github.com/abruption/agy-cli-usage/commit/c375d5a3e9c1698cbb1dfe998be6e7c388363986)), closes [#47](https://github.com/abruption/agy-cli-usage/issues/47)
+
 ## [0.4.5](https://github.com/abruption/agy-cli-usage/compare/v0.4.4...v0.4.5) (2026-07-03)
 
 

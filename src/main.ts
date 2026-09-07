@@ -13,7 +13,8 @@
 //   agy-cli-usage --version | -v  print the installed version
 
 import { getAccessToken, CredentialError } from './credentials.js';
-import { fetchQuotaSummary } from './api.js';
+import { fetchQuotaSummary, ApiError } from './api.js';
+import type { ApiErrorKind } from './api.js';
 import { captureUsageViaPty } from './pty-fallback.js';
 import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
@@ -27,6 +28,17 @@ import { fileURLToPath } from 'node:url';
 const CACHE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'agy-usage');
 const CACHE_FILE = join(CACHE_DIR, 'quota.json');
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+// The API path fails in ways that look alike on the wire but need different
+// things from the user — see ApiErrorKind in api.ts. Printing "sign in again"
+// for a missing license just sends people round a loop that cannot help.
+const API_ERROR_HINTS: Partial<Record<ApiErrorKind, string>> = {
+  unauthorized: 'hint: the stored token was rejected — run `agy` and sign in again.',
+  'not-entitled':
+    'hint: the token is valid but this Google account has no Antigravity license. Signing in again ' +
+    'will not change that — check which account `agy` is using, or its subscription.',
+  'no-project': 'hint: `--source pty` reads the panel from `agy` itself and does not need this endpoint.',
+};
 
 export interface CliOptions {
   json: boolean;
@@ -234,6 +246,8 @@ if (isMainModule()) {
       process.stderr.write(`credential error: ${err.message}\n`);
     } else {
       process.stderr.write(`error: ${errMessage(err)}\n`);
+      const hint = err instanceof ApiError ? API_ERROR_HINTS[err.kind] : undefined;
+      if (hint) process.stderr.write(`${hint}\n`);
     }
     process.exit(1);
   });

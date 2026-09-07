@@ -149,10 +149,18 @@ function readViaWindowsCredman(): string | null {
 
 // On headless Linux (no Secret Service) agy persists the token to a plain-JSON
 // file instead of the keyring. Same payload shape, no `go-keyring-base64:` prefix.
+//
+// The jetski path is last on purpose. macOS keeps that file around next to the
+// Keychain entry, and the two can hold *different* grants — an observed one was
+// three days stale and belonged to a session with no Antigravity license, which
+// still refreshes fine and only fails later at the quota call. Every keyring
+// backend is tried first, so this is reached only where the alternative is no
+// credential at all.
 function readViaFile(): string | null {
   const candidates = [
     process.env.AGY_OAUTH_TOKEN_FILE,
     join(homedir(), '.gemini', 'antigravity-cli', 'antigravity-oauth-token'),
+    join(homedir(), '.gemini', 'jetski-standalone-oauth-token'),
   ].filter((p): p is string => Boolean(p));
   for (const path of candidates) {
     try {

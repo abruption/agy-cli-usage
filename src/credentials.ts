@@ -176,10 +176,19 @@ function readViaFile(): string | null {
 }
 
 async function readRawSecret(): Promise<string | null> {
+  // On macOS, `security` CLI is tried first — @napi-rs/keyring's synchronous
+  // native Keychain call can hang indefinitely in non-interactive environments
+  // (blocks the event loop, so no timeout can rescue it).
+  if (process.platform === 'darwin') {
+    const fromCli = readViaCli();
+    if (fromCli) return fromCli;
+  }
   const fromNapi = await readViaNapiEsm();
   if (fromNapi) return fromNapi;
-  const fromCli = readViaCli();
-  if (fromCli) return fromCli;
+  if (process.platform !== 'darwin') {
+    const fromCli = readViaCli();
+    if (fromCli) return fromCli;
+  }
   const fromWin = readViaWindowsCredman();
   if (fromWin) return fromWin;
   const fromFile = readViaFile();

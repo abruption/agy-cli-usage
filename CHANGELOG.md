@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [0.4.7](https://github.com/abruption/agy-cli-usage/compare/v0.4.6...v0.4.7) (2026-09-08)
+
+
+### Bug Fixes
+
+* prefer security CLI over napi-rs/keyring on macOS ([#51](https://github.com/abruption/agy-cli-usage/issues/51)) ([73a6052](https://github.com/abruption/agy-cli-usage/commit/73a605208299a2468a473402f3886f17232b1bdf)), closes [#50](https://github.com/abruption/agy-cli-usage/issues/50)
+
 ## [0.4.6](https://github.com/abruption/agy-cli-usage/compare/v0.4.5...v0.4.6) (2026-09-07)
 
 

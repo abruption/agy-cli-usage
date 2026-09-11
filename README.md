@@ -101,11 +101,11 @@ The token is **read only** from wherever `agy` stored it. Handled per platform a
 | OS / environment | Storage | How it's read |
 |------------------|---------|---------------|
 | macOS | Keychain | `security` CLI |
-| Linux desktop | Secret Service | `@napi-rs/keyring` (fallback `secret-tool`) |
+| Linux desktop | Secret Service | `secret-tool` CLI |
 | **Windows** | Credential Manager | Win32 `CredRead` via built-in `powershell.exe` |
 | **Headless Linux** | token file | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
 
-Read order: `keyring → OS CLI → Windows credman → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
+Read order: `platform OS credential reader → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
 
 Token files are tried in order: `AGY_OAUTH_TOKEN_FILE`, then `~/.gemini/antigravity-cli/antigravity-oauth-token`, then `~/.gemini/jetski-standalone-oauth-token`. The last one is checked only after every keyring backend has failed — on macOS it sits beside the Keychain entry and can hold an older grant from a different session, so it must not win over a working one.
 
@@ -207,7 +207,7 @@ Notes for parsing:
 
 | Route | Response |
 |-------|----------|
-| `GET /quota` | `200` `Snapshot` JSON (same shape as `--json`). `?refresh=1` bypasses cache. `502 {"error":...}` on failure. Headers: `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *`. |
+| `GET /quota` | `200` `Snapshot` JSON (same shape as `--json`). `?refresh=1` bypasses cache. `502 {"error":...}` on failure. Headers: `Cache-Control: no-store`, `Access-Control-Allow-Origin: <allowed origin>`. |
 | `GET /healthz` | `200 {"ok":true}` |
 | (other) | `404 {"error":"not found"}` |
 
@@ -239,6 +239,18 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Native dependency removal
+
+`@napi-rs/keyring` and its platform binaries are no longer installed. macOS uses the built-in `security` CLI, Linux uses `secret-tool` (Ubuntu package: `libsecret-tools`), and Windows uses built-in PowerShell/CredRead. OS-reader failures still fall back to token files, then to PTY in auto mode. A Linux desktop without `secret-tool` and without a token file uses PTY; install `libsecret-tools` if direct API access to Secret Service is needed. Optional `node-pty` remains for Windows PTY support.
+
+### HTTP access policy
+
+The server accepts `GET` only (plus allowed CORS preflights). Responses use `Cache-Control: no-store`; the internal five-minute cache is independent. Invalid requests return 400, denied Host/Origin returns 403, and unsupported methods return 405. Upstream errors return `502 {"error":"quota unavailable"}` without upstream details.
+
+Loopback Host names (`localhost`, `127.0.0.1`, `[::1]`) are allowed by default. Set `AGY_ALLOWED_HOSTS=quota.example` to allow additional host names; ports are ignored for matching. Browser Origins are denied by default. Set `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080` to allow exact HTTP(S) origins without trailing slashes. Wildcards and opaque `null` origins are unsupported. Requests without Origin remain available to scripts; cross-site browser requests identified by Fetch Metadata are denied.
+
+`HOST` defaults to `127.0.0.1`, and `PORT` must be 1–65535 (default 3007). Origin/Host checks are not authentication: deployments bound to external interfaces need an authenticated reverse proxy or a trusted network.
 
 ### Operation deadlines
 

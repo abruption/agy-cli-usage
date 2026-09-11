@@ -8,11 +8,9 @@
 //     "auth_method": "consumer" }
 //
 // Read backends, tried in order:
-//   1. OS credential reader: macOS security, Linux secret-tool, Windows CredRead
-//   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
-//   3. Windows Credential Manager       (CredRead via powershell.exe — go-keyring's
-//                                        target format differs from keyring-rs's)
-//   4. File fallback                    (headless Linux: agy can't reach a keyring
+//   1. OS credential reader (`security` on macOS, `secret-tool` on Linux,
+//      CredRead via powershell.exe on Windows)
+//   2. File fallback                    (headless Linux: agy can't reach a keyring
 //                                        and writes the token to a plain-JSON file)
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
@@ -80,8 +78,7 @@ async function readViaCli(): Promise<string | null> {
 
 // On Windows, agy stores the token in Credential Manager via Go's
 // zalando/go-keyring, whose target name is `service:account` ("gemini:antigravity").
-// @napi-rs/keyring (keyring-rs) uses a different target format and can't find it,
-// so we read the credential blob directly via the Win32 CredRead API through the
+// Read the credential blob directly via the Win32 CredRead API through the
 // built-in powershell.exe (no extra dependency).
 const WIN_CRED_TARGET = `${KEYRING_SERVICE}:${KEYRING_ACCOUNT}`;
 

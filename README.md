@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### CLI validation and updates
+
+Unknown arguments, nonpositive/invalid watch intervals and intervals exceeding the platform timer range are errors. Watch defaults to 60 seconds and clamps positive values below 5 seconds to 5. Decimal seconds are accepted. `--check` is valid only with `update`; quota flags cannot be combined with that command. Self-update accepts stable numeric versions from the registry, launches npm.cmd through cmd.exe on Windows using validated arguments, and reports interrupted installs as failures.

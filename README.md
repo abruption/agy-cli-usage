@@ -274,11 +274,11 @@ Unknown arguments, nonpositive/invalid watch intervals and intervals exceeding t
 
 ### Node.js compatibility transition
 
-Node.js 22.13.0 or newer is required. Upgrade Node 18/20 before installing this release. Type declarations target Node 22. CI validates the minimum 22.13.0 release and Node 22/24 across Linux, macOS and Windows. Legacy Node 18/20 CI jobs temporarily remain only to preserve existing required-check names during the transition; they are not a support commitment. Maintainers: see `.github/CI_MIGRATION.md` for gate migration and rollback.
+Node.js 22.13.0 or newer is required. Upgrade Node 18/20 before installing this release. Type declarations target Node 22. CI validates the minimum 22.13.0 release and Node 22/24 across Linux, macOS and Windows. The required `supported-tests` gate covers this matrix; legacy Node 18/20 jobs have been removed. Maintainers: see `.github/CI_MIGRATION.md` for the completed migration and rollback procedure.
 
 ### CI and package verification
 
-`npm run smoke:package` builds and packs the release artifact, installs it under a temporary prefix and checks both command aliases without credentials. Korean documentation is included in the tarball. CI pins Action revisions, uses read-only repository permissions, audits dependencies and verifies package installation on Linux/Windows. Release creation and npm publication run in separate jobs; only publication receives OIDC permission, and it checks out the newly created release tag. Required gate names are `lint`, `security-audit`, `package-smoke`, and the Node support PR’s `supported-tests`; migrate protection only after they pass on main.
+`npm run smoke:package` builds and packs the release artifact, installs it under a temporary prefix and checks both command aliases without credentials. Korean documentation is included in the tarball. CI pins Action revisions, uses read-only repository permissions, audits dependencies and verifies package installation on Linux/Windows. Release creation and npm publication run in separate jobs; only publication receives OIDC permission, and it checks out the newly created release tag. Required gate names are `lint`, `security-audit`, `package-smoke`, and `supported-tests`.
 
 ### PTY authentication
 

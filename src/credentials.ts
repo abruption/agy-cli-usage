@@ -8,7 +8,7 @@
 //     "auth_method": "consumer" }
 //
 // Read backends, tried in order:
-//   1. macOS security CLI first; elsewhere isolated @napi-rs/keyring worker
+//   1. OS credential reader: macOS security, Linux secret-tool, Windows CredRead
 //   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
 //   3. Windows Credential Manager       (CredRead via powershell.exe — go-keyring's
 //                                        target format differs from keyring-rs's)
@@ -21,7 +21,6 @@ import { execFile } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { requestJson, type RequestDeps } from './request.js';
 
 // OAuth client for the Antigravity CLI. This is an installed/desktop ("public")
@@ -67,10 +66,6 @@ export function runSecretCommand(file: string, args: string[], timeoutMs = CREDE
     }, (err, stdout) => resolve(err ? null : stdout.trim() || null));
     proc.stdin?.end();
   });
-}
-
-function readViaNapiEsm(): Promise<string | null> {
-  return runSecretCommand(process.execPath, [fileURLToPath(new URL('./keyring-worker.js', import.meta.url))]);
 }
 
 async function readViaCli(): Promise<string | null> {
@@ -173,18 +168,16 @@ function readViaFile(): string | null {
 
 export interface CredentialProviders {
   platform?: NodeJS.Platform;
-  cli?: () => Promise<string | null>;
-  native?: () => Promise<string | null>;
-  windows?: () => Promise<string | null>;
+  cli?: () => Promise<string | null> | string | null;
+  windows?: () => Promise<string | null> | string | null;
   file?: () => string | null;
 }
 
-/** Injection is for credential-free tests; defaults preserve agy's provider precedence. */
+/** Read-only OS providers, then token file; callers retain the PTY fallback. */
 export async function readRawSecret(providers: CredentialProviders = {}): Promise<string | null> {
-  const cli = providers.cli ?? readViaCli;
-  const native = providers.native ?? readViaNapiEsm;
-  const backends = (providers.platform ?? process.platform) === 'darwin' ? [cli, native] : [native, cli];
-  for (const backend of [...backends, providers.windows ?? readViaWindowsCredman, providers.file ?? readViaFile]) {
+  const platform = providers.platform ?? process.platform;
+  const osProvider = platform === 'win32' ? providers.windows ?? readViaWindowsCredman : providers.cli ?? readViaCli;
+  for (const backend of [osProvider, providers.file ?? readViaFile]) {
     try {
       const raw = await backend();
       if (raw) return raw;

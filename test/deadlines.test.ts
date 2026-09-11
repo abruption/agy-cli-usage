@@ -55,16 +55,15 @@ test('credential subprocesses are killable without blocking the parent event loo
   assert.equal(await runSecretCommand(process.execPath, ['-e', 'process.stderr.write("private");process.exit(1)']), null);
 });
 
-test('macOS CLI stays first and failed providers continue to the file fallback', async () => {
+test('OS reader failure continues to the file fallback on each platform', async () => {
   for (const platform of ['darwin', 'linux', 'win32'] as const) {
     const order: string[] = [];
     const result = await readRawSecret({ platform,
       cli: async () => { order.push('cli'); return null; },
-      native: async () => { order.push('native'); throw new Error('locked'); },
-      windows: async () => { order.push('windows'); return null; },
+      windows: async () => { order.push('windows'); throw new Error('locked'); },
       file: () => { order.push('file'); return 'fixture'; },
     });
     assert.equal(result, 'fixture');
-    assert.deepEqual(order, platform === 'darwin' ? ['cli', 'native', 'windows', 'file'] : ['native', 'cli', 'windows', 'file']);
+    assert.deepEqual(order, [platform === 'win32' ? 'windows' : 'cli', 'file']);
   }
 });

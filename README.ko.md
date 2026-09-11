@@ -100,7 +100,7 @@ agy-cli-usage --version        # 버전 출력
 
 | OS / 환경 | 저장 위치 | 읽는 방법 |
 |-----------|----------|----------|
-| macOS | Keychain | `security` CLI → 격리된 `@napi-rs/keyring` 프로세스 |
+| macOS | Keychain | `security` CLI |
 | Linux 데스크톱 | Secret Service | `@napi-rs/keyring` (폴백 `secret-tool`) |
 | **Windows** | Credential Manager | 내장 `powershell.exe`로 Win32 `CredRead` 호출 |
 | **헤드리스 Linux** | 토큰 파일 | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
@@ -240,4 +240,4 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 ### 작업 시간 제한
 
-API·OAuth refresh는 응답 본문을 포함해 요청당 10초, 자격증명 CLI·native worker는 각각 5초로 제한합니다. native 키링은 종료 가능한 별도 Node 프로세스에서 실행합니다. macOS는 `security`를 먼저, 다른 플랫폼은 native worker를 먼저 시도하며 실패 시 기존 읽기 전용 폴백을 계속합니다. 업스트림 본문과 자격증명 프로세스 stderr는 오류 메시지에 포함하지 않습니다.
+API·OAuth refresh는 응답 본문을 포함해 요청당 10초, OS 자격증명 조회는 비동기 실행과 각각 5초로 제한합니다. macOS는 `security`, Linux는 `secret-tool`, Windows는 PowerShell/CredRead를 사용하며 실패 시 기존 읽기 전용 폴백을 계속합니다. 업스트림 본문과 자격증명 프로세스 stderr는 오류 메시지에 포함하지 않습니다.

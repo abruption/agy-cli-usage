@@ -253,3 +253,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 ### 작업 시간 제한
 
 API·OAuth refresh는 응답 본문을 포함해 요청당 10초, OS 자격증명 조회는 비동기 실행과 각각 5초로 제한합니다. macOS는 `security`, Linux는 `secret-tool`, Windows는 PowerShell/CredRead를 사용하며 실패 시 기존 읽기 전용 폴백을 계속합니다. 업스트림 본문과 자격증명 프로세스 stderr는 오류 메시지에 포함하지 않습니다.
+
+### 폴링·PTY 실행 제한
+
+같은 source/channel/cache 옵션·캐시 경로의 동시 요청은 프로세스 내 진행 중인 조회를 공유하며 실패 후 재시도할 수 있습니다. watch는 조회 완료 후 지정 간격을 기다리며 Ctrl-C로 다음 폴링을 중단합니다. PTY 캡처는 기존 23초 창을 유지하고 부모 프로세스에서 30초·출력 4MiB로 제한합니다. POSIX Python 캡처는 임시 파일 없이 스트리밍하고 종료 시 PTY 자식 세션을 정리합니다.

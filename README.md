@@ -255,3 +255,7 @@ Loopback Host names (`localhost`, `127.0.0.1`, `[::1]`) are allowed by default. 
 ### Operation deadlines
 
 API and OAuth refresh requests have a 10-second deadline including the response body. Each OS credential reader has a 5-second deadline and runs asynchronously. macOS uses `security`, Linux uses `secret-tool`, and Windows uses PowerShell/CredRead. Failed providers continue to the existing read-only fallbacks. Upstream response bodies and credential provider stderr are never included in errors.
+
+### Polling and PTY bounds
+
+Concurrent requests with the same source/channel/cache mode and cache path share one in-flight fetch within the process. A failed fetch releases that slot for retry. Watch waits for each fetch to finish, then waits the requested interval. Ctrl-C stops further polling. PTY capture retains the 23-second capture window, with a 30-second parent deadline and 4 MiB output limit. POSIX Python capture streams output directly without temporary capture files, and terminates/reaps the PTY child session on exit.

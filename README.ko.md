@@ -205,7 +205,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 | 라우트 | 응답 |
 |--------|------|
-| `GET /quota` | `200` `Snapshot` JSON(`--json`과 동일 형태). `?refresh=1`은 캐시 우회. 실패 시 `502 {"error":...}`. 헤더: `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *`. |
+| `GET /quota` | `200` `Snapshot` JSON(`--json`과 동일 형태). `?refresh=1`은 캐시 우회. 실패 시 `502 {"error":...}`. 헤더: `Cache-Control: no-store`, `Access-Control-Allow-Origin: <allowed origin>`. |
 | `GET /healthz` | `200 {"ok":true}` |
 | (그 외) | `404 {"error":"not found"}` |
 
@@ -241,3 +241,11 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 ### native 의존성 제거
 
 `@napi-rs/keyring`과 플랫폼 바이너리는 설치하지 않습니다. macOS는 내장 `security`, Linux는 `secret-tool`(Ubuntu 패키지: `libsecret-tools`), Windows는 내장 PowerShell/CredRead를 사용합니다. OS 조회 실패 시 토큰 파일, auto 모드에서는 PTY 폴백이 유지됩니다. Linux 데스크톱에서 `secret-tool`과 토큰 파일이 모두 없으면 PTY를 사용하며 Secret Service의 API 경로가 필요하면 `libsecret-tools`를 설치하세요. Windows PTY 지원을 위한 선택적 `node-pty`는 유지합니다.
+
+### HTTP 접근 정책
+
+서버는 `GET`과 허용된 CORS preflight만 처리합니다. 응답은 `Cache-Control: no-store`이며 내부 5분 캐시는 별도로 유지합니다. 잘못된 요청은 400, 허용되지 않은 Host/Origin은 403, 지원하지 않는 메서드는 405입니다. 업스트림 오류는 상세정보 없이 `502 {"error":"quota unavailable"}`로 반환합니다.
+
+기본 허용 Host는 `localhost`, `127.0.0.1`, `[::1]`입니다. `AGY_ALLOWED_HOSTS=quota.example`로 이름을 추가하며 포트는 비교에서 제외합니다. 브라우저 Origin은 기본 거부합니다. `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080`처럼 마지막 슬래시 없는 정확한 HTTP(S) Origin을 등록하세요. `*`와 `null`은 지원하지 않습니다. Origin 없는 스크립트 요청은 허용하며 Fetch Metadata가 cross-site인 브라우저 요청은 거부합니다.
+
+`HOST` 기본값은 `127.0.0.1`, `PORT`는 1–65535(기본 3007)입니다. Host/Origin 검사는 인증이 아니므로 외부 인터페이스에 바인딩한 경우 인증 프록시나 신뢰할 수 있는 네트워크를 사용하세요.

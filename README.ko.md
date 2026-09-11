@@ -100,12 +100,12 @@ agy-cli-usage --version        # 버전 출력
 
 | OS / 환경 | 저장 위치 | 읽는 방법 |
 |-----------|----------|----------|
-| macOS | Keychain | `@napi-rs/keyring` (폴백 `security`) |
-| Linux 데스크톱 | Secret Service | `@napi-rs/keyring` (폴백 `secret-tool`) |
+| macOS | Keychain | `security` CLI |
+| Linux 데스크톱 | Secret Service | `secret-tool` CLI |
 | **Windows** | Credential Manager | 내장 `powershell.exe`로 Win32 `CredRead` 호출 |
 | **헤드리스 Linux** | 토큰 파일 | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
 
-읽기 순서: `키링 → OS CLI → Windows credman → 토큰 파일 → PTY`. 파일 경로는 `AGY_OAUTH_TOKEN_FILE`로 override.
+읽기 순서: `플랫폼별 OS 자격증명 조회 → 토큰 파일 → PTY`. 파일 경로는 `AGY_OAUTH_TOKEN_FILE`로 override.
 
 ## HTTP 엔드포인트 (선택)
 
@@ -237,6 +237,10 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - 자동화 시 `--json`(서브프로세스) 또는 `GET /quota`(상시 서비스)를 호출. 둘 다 동일 캐시를 거치므로 고빈도 폴링도 안전.
 - 휴먼 패널은 파싱하지 말 것 — ANSI 이스케이프 포함, 레이아웃 지향. `Snapshot` JSON이 안정적 계약.
 - 이 도구는 자격증명을 **읽기만** 하며, `agy` 세션을 변경하거나 토큰을 되쓰지 않음.
+
+### native 의존성 제거
+
+`@napi-rs/keyring`과 플랫폼 바이너리는 설치하지 않습니다. macOS는 내장 `security`, Linux는 `secret-tool`(Ubuntu 패키지: `libsecret-tools`), Windows는 내장 PowerShell/CredRead를 사용합니다. OS 조회 실패 시 토큰 파일, auto 모드에서는 PTY 폴백이 유지됩니다. Linux 데스크톱에서 `secret-tool`과 토큰 파일이 모두 없으면 PTY를 사용하며 Secret Service의 API 경로가 필요하면 `libsecret-tools`를 설치하세요. Windows PTY 지원을 위한 선택적 `node-pty`는 유지합니다.
 
 ### HTTP 접근 정책
 

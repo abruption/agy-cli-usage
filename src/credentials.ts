@@ -8,16 +8,13 @@
 //     "auth_method": "consumer" }
 //
 // Read backends, tried in order:
-//   1. @napi-rs/keyring native module  (macOS / Linux Secret Service)
-//   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
-//   3. Windows Credential Manager       (CredRead via powershell.exe — go-keyring's
-//                                        target format differs from keyring-rs's)
-//   4. File fallback                    (headless Linux: agy can't reach a keyring
+//   1. OS credential reader (`security` on macOS, `secret-tool` on Linux,
+//      CredRead via powershell.exe on Windows)
+//   2. File fallback                    (headless Linux: agy can't reach a keyring
 //                                        and writes the token to a plain-JSON file)
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
 
-import { readNativeSecret } from './native-keyring.js';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -55,10 +52,6 @@ interface Cred {
 
 // --- raw keyring read --------------------------------------------------------
 
-function readViaNapiEsm(): Promise<string | null> {
-  return readNativeSecret();
-}
-
 function readViaCli(): string | null {
   try {
     if (process.platform === 'darwin') {
@@ -83,8 +76,7 @@ function readViaCli(): string | null {
 
 // On Windows, agy stores the token in Credential Manager via Go's
 // zalando/go-keyring, whose target name is `service:account` ("gemini:antigravity").
-// @napi-rs/keyring (keyring-rs) uses a different target format and can't find it,
-// so we read the credential blob directly via the Win32 CredRead API through the
+// Read the credential blob directly via the Win32 CredRead API through the
 // built-in powershell.exe (no extra dependency).
 const WIN_CRED_TARGET = `${KEYRING_SERVICE}:${KEYRING_ACCOUNT}`;
 
@@ -173,17 +165,15 @@ function readViaFile(): string | null {
 export interface CredentialProviders {
   platform?: NodeJS.Platform;
   cli?: () => Promise<string | null> | string | null;
-  native?: () => Promise<string | null> | string | null;
   windows?: () => Promise<string | null> | string | null;
   file?: () => string | null;
 }
 
-/** Injection is for credential-free tests; defaults preserve agy's provider precedence. */
+/** Read-only OS providers, then token file; callers retain the PTY fallback. */
 export async function readRawSecret(providers: CredentialProviders = {}): Promise<string | null> {
-  const cli = providers.cli ?? readViaCli;
-  const native = providers.native ?? readViaNapiEsm;
-  const backends = (providers.platform ?? process.platform) === 'darwin' ? [cli, native] : [native, cli];
-  for (const backend of [...backends, providers.windows ?? readViaWindowsCredman, providers.file ?? readViaFile]) {
+  const platform = providers.platform ?? process.platform;
+  const osProvider = platform === 'win32' ? providers.windows ?? readViaWindowsCredman : providers.cli ?? readViaCli;
+  for (const backend of [osProvider, providers.file ?? readViaFile]) {
     try {
       const raw = await backend();
       if (raw) return raw;

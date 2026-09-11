@@ -64,7 +64,7 @@ npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 18.
+> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 22.13.0.
 
 ## 사용법
 
@@ -125,7 +125,7 @@ npm run check     # tsc --noEmit (타입 체크)
 npm test          # 빌드 후 node --test (자격증명·네트워크 불필요, 순수 로직)
 ```
 
-- **CI**: push/PR마다 Ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.
+- **CI**: push/PR마다 Ubuntu의 Node 22.13.0과 Ubuntu·macOS·Windows의 Node 22/24를 검증합니다. 보호 설정 전환 중에는 기존 체크도 유지합니다.
 - **릴리스**: [release-please](https://github.com/googleapis/release-please) — Conventional Commits 기반 완전 자동화. main에 머지된 커밋으로 **Release PR**(버전 범프 + CHANGELOG)이 유지되고, 그 PR을 머지하면 태그·GitHub Release·`npm publish --provenance`가 자동 실행됩니다.
 
 ## 주의
@@ -147,7 +147,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 ## TL;DR
 
-- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 18. 같은 호스트에 `agy` 로그인 필요.
+- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 22.13.0. 같은 호스트에 `agy` 로그인 필요.
 - 구조화 데이터: `agy-cli-usage --json` (stdout) 또는 `GET http://127.0.0.1:3007/quota`.
 - `auto`의 소스 순서: 직접 API → PTY 폴백. 결과는 5분 캐시.
 
@@ -237,3 +237,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - 자동화 시 `--json`(서브프로세스) 또는 `GET /quota`(상시 서비스)를 호출. 둘 다 동일 캐시를 거치므로 고빈도 폴링도 안전.
 - 휴먼 패널은 파싱하지 말 것 — ANSI 이스케이프 포함, 레이아웃 지향. `Snapshot` JSON이 안정적 계약.
 - 이 도구는 자격증명을 **읽기만** 하며, `agy` 세션을 변경하거나 토큰을 되쓰지 않음.
+
+### Node.js 지원 전환
+
+Node.js 22.13.0 이상이 필요합니다. Node 18/20 사용자는 설치 전에 Node를 업그레이드하세요. 타입 정의는 Node 22에 맞춥니다. CI는 최소 22.13.0 및 Linux·macOS·Windows의 Node 22/24를 검증합니다. 기존 Node 18/20 CI는 브랜치 보호 체크 이름 전환을 위해 임시 유지하며 지원 약속이 아닙니다. 관리자의 전환·복구 절차는 `.github/CI_MIGRATION.md`에 있습니다.

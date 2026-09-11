@@ -64,7 +64,7 @@ npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> Prerequisites: `agy` is logged in on the same machine, and Node.js >= 18.
+> Prerequisites: `agy` is logged in on the same machine, and Node.js >= 22.13.0.
 
 ## Usage
 
@@ -127,7 +127,7 @@ npm run check     # tsc --noEmit (type-check)
 npm test          # build, then node --test (no credentials/network; pure logic)
 ```
 
-- **CI**: every push/PR runs the test suite on Ubuntu (Node 18/20/22) + macOS/Windows (Node 22).
+- **CI**: every push/PR validates Node 22.13.0 on Ubuntu and Node 22/24 on Ubuntu, macOS and Windows. Legacy checks remain during the protection migration.
 - **Release**: [release-please](https://github.com/googleapis/release-please) — fully automated from Conventional Commits. Merged commits keep a **Release PR** (version bump + CHANGELOG) up to date; merging that PR creates the tag + GitHub Release and runs `npm publish --provenance`.
 
 ## Caveats
@@ -149,7 +149,7 @@ npm test          # build, then node --test (no credentials/network; pure logic)
 
 ## TL;DR
 
-- Binary: `agy-cli-usage` (alias `agy-usage`). Node >= 18. Requires `agy` logged in on the same host.
+- Binary: `agy-cli-usage` (alias `agy-usage`). Node >= 22.13.0. Requires `agy` logged in on the same host.
 - Get structured data: `agy-cli-usage --json` (stdout) or `GET http://127.0.0.1:3007/quota`.
 - Source order in `auto`: direct API first, PTY fallback second. Results cached 5 minutes.
 
@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Node.js compatibility transition
+
+Node.js 22.13.0 or newer is required. Upgrade Node 18/20 before installing this release. Type declarations target Node 22. CI validates the minimum 22.13.0 release and Node 22/24 across Linux, macOS and Windows. Legacy Node 18/20 CI jobs temporarily remain only to preserve existing required-check names during the transition; they are not a support commitment. Maintainers: see `.github/CI_MIGRATION.md` for gate migration and rollback.

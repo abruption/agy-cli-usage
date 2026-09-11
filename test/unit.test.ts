@@ -426,8 +426,8 @@ test('GET /quota returns the snapshot JSON with caching headers on success', asy
 
   const res = await fetch(`http://127.0.0.1:${port}/quota`);
   assert.equal(res.status, 200);
-  assert.equal(res.headers.get('access-control-allow-origin'), '*');
-  assert.equal(res.headers.get('cache-control'), 'public, max-age=300');
+  assert.equal(res.headers.get('access-control-allow-origin'), null);
+  assert.equal(res.headers.get('cache-control'), 'no-store');
   const body = (await res.json()) as Snapshot;
   assert.equal(body.account, 'a@b.com');
   assert.deepEqual(receivedOpts, { source: 'auto', channel: 'auto', cache: true });
@@ -455,7 +455,7 @@ test('GET /quota returns 502 with an error body when the snapshot fetch fails', 
   const res = await fetch(`http://127.0.0.1:${port}/quota`);
   assert.equal(res.status, 502);
   const body = (await res.json()) as { error: string };
-  assert.equal(body.error, 'upstream unavailable');
+  assert.equal(body.error, 'quota unavailable');
 });
 
 test('unknown routes return 404 with an error body', async (t) => {
@@ -468,4 +468,8 @@ test('unknown routes return 404 with an error body', async (t) => {
   assert.deepEqual(await res.json(), { error: 'not found' });
 });
 
+import './credential-backends.test.js';
+import './http.test.js';
+import './deadlines.test.js';
+import './polling.test.js';
 import './cache.test.js';

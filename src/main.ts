@@ -12,6 +12,7 @@
 //   agy-cli-usage update [--check]  self-update via npm
 //   agy-cli-usage --version | -v  print the installed version
 
+import { singleFlight, watchLoop } from './polling.js';
 import { getAccessToken, CredentialError } from './credentials.js';
 import { fetchQuotaSummary, ApiError } from './api.js';
 import type { ApiErrorKind } from './api.js';
@@ -21,9 +22,10 @@ import { renderPanel } from './render.js';
 import { currentVersion, runUpdate } from './update.js';
 import type { Snapshot } from './types.js';
 import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readCache, writeCache } from './cache.js';
+import { readCache, writeCache, CACHE_FILE } from './cache.js';
 export { readCache, writeCache } from './cache.js';
 
 // The API path fails in ways that look alike on the wire but need different
@@ -118,7 +120,13 @@ export interface SnapshotOptions {
   cacheFile?: string;
 }
 
-export async function getSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
+export function snapshotKey(opts: SnapshotOptions): string {
+  return JSON.stringify([opts.source, opts.channel, opts.cache, resolve(opts.cacheFile ?? CACHE_FILE)]);
+}
+
+export const getSnapshot = singleFlight(snapshotKey, fetchSnapshot);
+
+async function fetchSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   if (opts.cache && opts.source !== 'pty') {
     const cached = readCache(opts.source, opts.channel, opts.cacheFile);
     if (cached) return cached;
@@ -167,8 +175,15 @@ async function main(): Promise<void> {
         process.stderr.write(`error: ${errMessage(err)}\n`);
       }
     };
-    await tick();
-    setInterval(tick, intervalMs);
+    const controller = new AbortController();
+    const stop = (): void => controller.abort();
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try { await watchLoop(tick, intervalMs, controller.signal); }
+    finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+    }
   } else {
     await once(opts);
   }

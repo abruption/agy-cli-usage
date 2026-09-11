@@ -118,7 +118,10 @@ export async function captureViaNodePty(opts: CaptureOptions, load = async (): P
       disposables.forEach((d) => d.dispose());
       process.removeListener('SIGINT', onInt);
       process.removeListener('SIGTERM', onTerm);
-      try { term.kill('SIGKILL'); } catch { /* already exited */ }
+      try {
+        // node-pty explicitly rejects Unix signal names on Windows.
+        if (process.platform === 'win32') term.kill(); else term.kill('SIGKILL');
+      } catch { /* already exited */ }
       if (error) reject(error); else resolve(Buffer.concat(chunks));
     };
     const onInt = (): void => { process.exitCode = 130; finish(new Error('PTY capture interrupted')); };

@@ -47,7 +47,10 @@ test('node-pty output limits and early exits kill the process and dispose listen
     let onExit: () => void = () => {};
     const listeners = process.listenerCount('SIGINT');
     const task = captureViaNodePty({ bin: 'fake', maxBytes: 10, durationMs: 1000 }, async () => ({ spawn: () => ({
-      write() {}, kill() { killed++; },
+      write() {}, kill(signal?: string) {
+        assert.equal(signal, process.platform === 'win32' ? undefined : 'SIGKILL');
+        killed++;
+      },
       onData(cb: typeof onData) { onData = cb; return { dispose() { disposed++; } }; },
       onExit(cb: typeof onExit) { onExit = cb; return { dispose() { disposed++; } }; },
     }) }));

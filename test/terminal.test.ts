@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reconstructScreen, parsePanel } from '../src/pty-fallback.js';
+import { reconstructScreen, parsePanel, parseCapturedPanel } from '../src/pty-fallback.js';
 import { SAMPLE_PANEL_TEXT } from './fixtures.js';
 
 test('the real headless terminal reconstructs alternate-screen PTY bytes through ESM interop', async () => {
@@ -10,4 +10,12 @@ test('the real headless terminal reconstructs alternate-screen PTY bytes through
   assert.equal(panel.groups.length, 2);
   assert.equal(panel.groups[0].name, 'GEMINI MODELS');
   assert.ok(panel.groups[0].buckets.length > 0);
+});
+
+
+test('PTY login screens give actionable errors without exposing authorization URLs', () => {
+  assert.throws(() => parseCapturedPanel('Open the URL below in your browser: https://example.invalid/private\nauthorization code...'),
+    (error: unknown) => error instanceof Error && error.message.includes('interactive sign-in') && !error.message.includes('private'));
+  assert.equal(parseCapturedPanel('Click here to authenticate\n' + SAMPLE_PANEL_TEXT).groups.length, 2);
+  assert.throws(() => parseCapturedPanel('Unrecognized layout'), /Could not parse/);
 });

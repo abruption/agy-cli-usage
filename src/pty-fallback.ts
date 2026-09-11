@@ -209,8 +209,16 @@ export async function captureUsageViaPty(): Promise<ParsedPanel> {
     throw new Error('No PTY backend captured agy output (need python3 on POSIX, or node-pty on Windows)');
   }
   const screen = await reconstructScreen(raw);
+  return parseCapturedPanel(screen);
+}
+
+/** Distinguish a login screen from a changed usage layout without printing captured secrets. */
+export function parseCapturedPanel(screen: string): ParsedPanel {
   const parsed = parsePanel(screen);
   if (!parsed.groups.length) {
+    if (/Open the URL below in your browser|authorization code\.\.\.|Click here to authenticate/i.test(screen)) {
+      throw new Error('agy requires interactive sign-in; run agy on this machine, sign in, then retry');
+    }
     throw new Error('Could not parse /usage panel from agy output');
   }
   return parsed;

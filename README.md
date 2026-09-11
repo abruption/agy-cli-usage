@@ -239,3 +239,5 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+PTY fallback requires `agy` to be signed in in the same OS session. If its screen requests browser authentication, the command reports that interactive sign-in is required; it does not print the authorization URL/code. An API credential may remain readable even when agy itself requests a new interactive login.

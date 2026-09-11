@@ -470,3 +470,4 @@ test('unknown routes return 404 with an error body', async (t) => {
 
 import './credential-backends.test.js';
 import './http.test.js';
+import './deadlines.test.js';

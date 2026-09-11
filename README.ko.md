@@ -249,3 +249,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 기본 허용 Host는 `localhost`, `127.0.0.1`, `[::1]`입니다. `AGY_ALLOWED_HOSTS=quota.example`로 이름을 추가하며 포트는 비교에서 제외합니다. 브라우저 Origin은 기본 거부합니다. `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080`처럼 마지막 슬래시 없는 정확한 HTTP(S) Origin을 등록하세요. `*`와 `null`은 지원하지 않습니다. Origin 없는 스크립트 요청은 허용하며 Fetch Metadata가 cross-site인 브라우저 요청은 거부합니다.
 
 `HOST` 기본값은 `127.0.0.1`, `PORT`는 1–65535(기본 3007)입니다. Host/Origin 검사는 인증이 아니므로 외부 인터페이스에 바인딩한 경우 인증 프록시나 신뢰할 수 있는 네트워크를 사용하세요.
+
+### 작업 시간 제한
+
+API·OAuth refresh는 응답 본문을 포함해 요청당 10초, OS 자격증명 조회는 비동기 실행과 각각 5초로 제한합니다. macOS는 `security`, Linux는 `secret-tool`, Windows는 PowerShell/CredRead를 사용하며 실패 시 기존 읽기 전용 폴백을 계속합니다. 업스트림 본문과 자격증명 프로세스 stderr는 오류 메시지에 포함하지 않습니다.

@@ -251,3 +251,7 @@ The server accepts `GET` only (plus allowed CORS preflights). Responses use `Cac
 Loopback Host names (`localhost`, `127.0.0.1`, `[::1]`) are allowed by default. Set `AGY_ALLOWED_HOSTS=quota.example` to allow additional host names; ports are ignored for matching. Browser Origins are denied by default. Set `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080` to allow exact HTTP(S) origins without trailing slashes. Wildcards and opaque `null` origins are unsupported. Requests without Origin remain available to scripts; cross-site browser requests identified by Fetch Metadata are denied.
 
 `HOST` defaults to `127.0.0.1`, and `PORT` must be 1–65535 (default 3007). Origin/Host checks are not authentication: deployments bound to external interfaces need an authenticated reverse proxy or a trusted network.
+
+### Operation deadlines
+
+API and OAuth refresh requests have a 10-second deadline including the response body. Each OS credential reader has a 5-second deadline and runs asynchronously. macOS uses `security`, Linux uses `secret-tool`, and Windows uses PowerShell/CredRead. Failed providers continue to the existing read-only fallbacks. Upstream response bodies and credential provider stderr are never included in errors.

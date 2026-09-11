@@ -64,7 +64,7 @@ npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> Prerequisites: `agy` is logged in on the same machine, and Node.js >= 18.
+> Prerequisites: `agy` is logged in on the same machine, and Node.js >= 22.13.0.
 
 ## Usage
 
@@ -100,12 +100,12 @@ The token is **read only** from wherever `agy` stored it. Handled per platform a
 
 | OS / environment | Storage | How it's read |
 |------------------|---------|---------------|
-| macOS | Keychain | `@napi-rs/keyring` (fallback `security`) |
-| Linux desktop | Secret Service | `@napi-rs/keyring` (fallback `secret-tool`) |
+| macOS | Keychain | `security` CLI |
+| Linux desktop | Secret Service | `secret-tool` CLI |
 | **Windows** | Credential Manager | Win32 `CredRead` via built-in `powershell.exe` |
 | **Headless Linux** | token file | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
 
-Read order: `keyring → OS CLI → Windows credman → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
+Read order: `platform OS credential reader → token file → PTY`. Override the file path with `AGY_OAUTH_TOKEN_FILE`.
 
 Token files are tried in order: `AGY_OAUTH_TOKEN_FILE`, then `~/.gemini/antigravity-cli/antigravity-oauth-token`, then `~/.gemini/jetski-standalone-oauth-token`. The last one is checked only after every keyring backend has failed — on macOS it sits beside the Keychain entry and can hold an older grant from a different session, so it must not win over a working one.
 
@@ -127,7 +127,7 @@ npm run check     # tsc --noEmit (type-check)
 npm test          # build, then node --test (no credentials/network; pure logic)
 ```
 
-- **CI**: every push/PR runs the test suite on Ubuntu (Node 18/20/22) + macOS/Windows (Node 22).
+- **CI**: every push/PR validates Node 22.13.0 on Ubuntu and Node 22/24 on Ubuntu, macOS and Windows. Legacy checks remain during the protection migration.
 - **Release**: [release-please](https://github.com/googleapis/release-please) — fully automated from Conventional Commits. Merged commits keep a **Release PR** (version bump + CHANGELOG) up to date; merging that PR creates the tag + GitHub Release and runs `npm publish --provenance`.
 
 ## Caveats
@@ -149,7 +149,7 @@ npm test          # build, then node --test (no credentials/network; pure logic)
 
 ## TL;DR
 
-- Binary: `agy-cli-usage` (alias `agy-usage`). Node >= 18. Requires `agy` logged in on the same host.
+- Binary: `agy-cli-usage` (alias `agy-usage`). Node >= 22.13.0. Requires `agy` logged in on the same host.
 - Get structured data: `agy-cli-usage --json` (stdout) or `GET http://127.0.0.1:3007/quota`.
 - Source order in `auto`: direct API first, PTY fallback second. Results cached 5 minutes.
 
@@ -207,7 +207,7 @@ Notes for parsing:
 
 | Route | Response |
 |-------|----------|
-| `GET /quota` | `200` `Snapshot` JSON (same shape as `--json`). `?refresh=1` bypasses cache. `502 {"error":...}` on failure. Headers: `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *`. |
+| `GET /quota` | `200` `Snapshot` JSON (same shape as `--json`). `?refresh=1` bypasses cache. `502 {"error":...}` on failure. Headers: `Cache-Control: no-store`, `Access-Control-Allow-Origin: <allowed origin>`. |
 | `GET /healthz` | `200 {"ok":true}` |
 | (other) | `404 {"error":"not found"}` |
 
@@ -240,4 +240,46 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
 
-PTY fallback requires `agy` to be signed in in the same OS session. If its screen requests browser authentication, the command reports that interactive sign-in is required; it does not print the authorization URL/code. An API credential may remain readable even when agy itself requests a new interactive login.
+### Native dependency removal
+
+`@napi-rs/keyring` and its platform binaries are no longer installed. macOS uses the built-in `security` CLI, Linux uses `secret-tool` (Ubuntu package: `libsecret-tools`), and Windows uses built-in PowerShell/CredRead. OS-reader failures still fall back to token files, then to PTY in auto mode. A Linux desktop without `secret-tool` and without a token file uses PTY; install `libsecret-tools` if direct API access to Secret Service is needed. Optional `node-pty` remains for Windows PTY support.
+
+### HTTP access policy
+
+The server accepts `GET` only (plus allowed CORS preflights). Responses use `Cache-Control: no-store`; the internal five-minute cache is independent. Invalid requests return 400, denied Host/Origin returns 403, and unsupported methods return 405. Upstream errors return `502 {"error":"quota unavailable"}` without upstream details.
+
+Loopback Host names (`localhost`, `127.0.0.1`, `[::1]`) are allowed by default. Set `AGY_ALLOWED_HOSTS=quota.example` to allow additional host names; ports are ignored for matching. Browser Origins are denied by default. Set `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080` to allow exact HTTP(S) origins without trailing slashes. Wildcards and opaque `null` origins are unsupported. Requests without Origin remain available to scripts; cross-site browser requests identified by Fetch Metadata are denied.
+
+`HOST` defaults to `127.0.0.1`, and `PORT` must be 1–65535 (default 3007). Origin/Host checks are not authentication: deployments bound to external interfaces need an authenticated reverse proxy or a trusted network.
+
+### Operation deadlines
+
+API and OAuth refresh requests have a 10-second deadline including the response body. Each OS credential reader has a 5-second deadline and runs asynchronously. macOS uses `security`, Linux uses `secret-tool`, and Windows uses PowerShell/CredRead. Failed providers continue to the existing read-only fallbacks. Upstream response bodies and credential provider stderr are never included in errors.
+
+### Polling and PTY bounds
+
+Concurrent requests with the same source/channel/cache mode and cache path share one in-flight fetch within the process. A failed fetch releases that slot for retry. Watch waits for each fetch to finish, then waits the requested interval. Ctrl-C stops further polling. PTY capture retains the 23-second capture window, with a 30-second parent deadline and 4 MiB output limit. POSIX Python capture streams output directly without temporary capture files, and terminates/reaps the PTY child session on exit.
+
+### Cache file protection
+
+The cache directory/file use 0700/0600 on POSIX, including existing owner-controlled caches. Windows uses the user directory’s inherited ACL. Symlinks, non-regular files, invalid snapshots, expired records and future timestamps are ignored. Writes use a private temporary file in the same directory and atomic replacement; failures never prevent quota output. Only the snapshot is cached, never OAuth tokens.
+
+### Data validation
+
+Malformed credential objects, expiry timestamps and token refresh responses fail with a credential error. Malformed quota structures trigger the existing auto fallback. Finite quota fractions are clamped to 0–1; unknown/nonfinite values and invalid reset times become null. Human terminal fields have control sequences removed; JSON retains source strings and the existing Snapshot field structure.
+
+### CLI validation and updates
+
+Unknown arguments, nonpositive/invalid watch intervals and intervals exceeding the platform timer range are errors. Watch defaults to 60 seconds and clamps positive values below 5 seconds to 5. Decimal seconds are accepted. `--check` is valid only with `update`; quota flags cannot be combined with that command. Self-update accepts stable numeric versions from the registry, launches npm.cmd through cmd.exe on Windows using validated arguments, and reports interrupted installs as failures.
+
+### Node.js compatibility transition
+
+Node.js 22.13.0 or newer is required. Upgrade Node 18/20 before installing this release. Type declarations target Node 22. CI validates the minimum 22.13.0 release and Node 22/24 across Linux, macOS and Windows. Legacy Node 18/20 CI jobs temporarily remain only to preserve existing required-check names during the transition; they are not a support commitment. Maintainers: see `.github/CI_MIGRATION.md` for gate migration and rollback.
+
+### CI and package verification
+
+`npm run smoke:package` builds and packs the release artifact, installs it under a temporary prefix and checks both command aliases without credentials. Korean documentation is included in the tarball. CI pins Action revisions, uses read-only repository permissions, audits dependencies and verifies package installation on Linux/Windows. Release creation and npm publication run in separate jobs; only publication receives OIDC permission, and it checks out the newly created release tag. Required gate names are `lint`, `security-audit`, `package-smoke`, and the Node support PR’s `supported-tests`; migrate protection only after they pass on main.
+
+### PTY authentication
+
+PTY fallback requires `agy` to be signed in in the same OS session. If its screen requests browser authentication, the command reports that interactive sign-in is required; it does not print the authorization URL/code. An API credential may remain readable even when agy itself requests a new interactive login. SSH sessions can have different keychain access from a local terminal. Check credential access in the session where the PTY runs; the authentication screen does not establish that the whole machine is signed out.

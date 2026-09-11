@@ -12,10 +12,10 @@
 // Windows (ConPTY). agy shows a welcome screen first, so `/usage` is sent after
 // a delay and the session is held open long enough to render.
 
-import { spawn } from 'node:child_process';
-import { writeFileSync, readFileSync, mkdtempSync, existsSync, rmSync } from 'node:fs';
-import { tmpdir, homedir } from 'node:os';
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, delimiter } from 'node:path';
+import { captureViaPython, captureViaNodePty, COLS, ROWS } from './pty-capture.js';
 import type { BucketKind, ParsedBucket, ParsedGroup, ParsedPanel } from './types.js';
 
 // Resolve the agy binary: explicit AGY_BIN, then PATH, then common install dir.
@@ -32,92 +32,6 @@ function resolveAgy(): string {
 }
 
 const AGY_BIN = resolveAgy();
-const COLS = 120;
-const ROWS = 60;
-const USAGE_AT_MS = 10_000; // send /usage after the welcome screen settles
-const TEARDOWN_MS = 23_000; // keep session open long enough to render
-
-// --- capture: returns raw PTY bytes (Buffer) or null --------------------------
-
-async function captureViaNodePty(): Promise<Buffer | null> {
-  // node-pty is an optional dependency; defeat static module resolution so the
-  // build doesn't require it (CI installs with --omit=optional).
-  const moduleName: string = 'node-pty';
-  let pty: any;
-  try {
-    pty = await import(moduleName);
-  } catch {
-    return null;
-  }
-  return new Promise<Buffer | null>((resolve) => {
-    let term: any;
-    try {
-      term = pty.spawn(AGY_BIN, [], { name: 'xterm-256color', cols: COLS, rows: ROWS, cwd: process.cwd(), env: process.env });
-    } catch {
-      resolve(null);
-      return;
-    }
-    const chunks: Buffer[] = [];
-    term.onData((d: string) => chunks.push(Buffer.from(d, 'utf8')));
-    const t1 = setTimeout(() => { try { term.write('/usage\r'); } catch { /* ignore */ } }, USAGE_AT_MS);
-    const t2 = setTimeout(() => {
-      try { term.write('\x03'); } catch { /* ignore */ }
-      try { term.kill(); } catch { /* ignore */ }
-      resolve(Buffer.concat(chunks));
-    }, TEARDOWN_MS);
-    term.onExit(() => { clearTimeout(t1); clearTimeout(t2); resolve(Buffer.concat(chunks)); });
-  });
-}
-
-async function captureViaPython(): Promise<Buffer | null> {
-  if (process.platform === 'win32') return null;
-  // Cleaned up in `finally` below regardless of success/failure so repeated
-  // `--watch` runs or repeated fallback triggers don't leak a directory per
-  // capture (each holds a helper script + the captured PTY bytes).
-  const dir = mkdtempSync(join(tmpdir(), 'agy-usage-'));
-  try {
-    const helper = join(dir, 'drive.py');
-    const outFile = join(dir, 'out.bin');
-    writeFileSync(
-      helper,
-      `import os, pty, time, select, signal, struct, fcntl, termios
-AGY = ${JSON.stringify(AGY_BIN)}
-out = open(${JSON.stringify(outFile)}, "wb")
-pid, fd = pty.fork()
-if pid == 0:
-    os.execvpe(AGY, [AGY], os.environ)
-    os._exit(127)
-fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", ${ROWS}, ${COLS}, 0, 0))
-start = time.time(); sent = False
-while time.time() - start < ${TEARDOWN_MS / 1000}:
-    e = time.time() - start
-    r, _, _ = select.select([fd], [], [], 0.5)
-    if r:
-        try: d = os.read(fd, 8192)
-        except OSError: break
-        if not d: break
-        out.write(d); out.flush()
-    if not sent and e > ${USAGE_AT_MS / 1000}:
-        os.write(fd, b"/usage\\r"); sent = True
-try: os.write(fd, b"\\x03")
-except OSError: pass
-try: os.kill(pid, signal.SIGTERM)
-except Exception: pass
-out.close()
-`,
-    );
-    return await new Promise<Buffer | null>((resolve) => {
-      const proc = spawn('python3', [helper], { stdio: 'ignore' });
-      proc.on('error', () => resolve(null));
-      proc.on('exit', () => {
-        try { resolve(readFileSync(outFile)); } catch { resolve(null); }
-      });
-    });
-  } finally {
-    try { rmSync(dir, { recursive: true, force: true }); } catch { /* best-effort cleanup */ }
-  }
-}
-
 // --- VT reconstruction --------------------------------------------------------
 
 export async function reconstructScreen(raw: Buffer): Promise<string> {
@@ -202,7 +116,7 @@ export async function captureUsageViaPty(): Promise<ParsedPanel> {
 
   let raw: Buffer | null = null;
   for (const fn of order) {
-    raw = await fn();
+    raw = await fn({ bin: AGY_BIN });
     if (raw && raw.length) break;
   }
   if (!raw || !raw.length) {
@@ -217,7 +131,7 @@ export function parseCapturedPanel(screen: string): ParsedPanel {
   const parsed = parsePanel(screen);
   if (!parsed.groups.length) {
     if (/Open the URL below in your browser|authorization code\.\.\.|Click here to authenticate/i.test(screen)) {
-      throw new Error('agy requires interactive sign-in; run agy on this machine, sign in, then retry');
+      throw new Error('agy requested interactive sign-in in this PTY session; check credential access or sign in from the same session, then retry');
     }
     throw new Error('Could not parse /usage panel from agy output');
   }

@@ -474,3 +474,4 @@ import './deadlines.test.js';
 import './polling.test.js';
 import './cache.test.js';
 import './data.test.js';
+import './cli.test.js';

@@ -267,3 +267,7 @@ The cache directory/file use 0700/0600 on POSIX, including existing owner-contro
 ### Data validation
 
 Malformed credential objects, expiry timestamps and token refresh responses fail with a credential error. Malformed quota structures trigger the existing auto fallback. Finite quota fractions are clamped to 0–1; unknown/nonfinite values and invalid reset times become null. Human terminal fields have control sequences removed; JSON retains source strings and the existing Snapshot field structure.
+
+### CLI validation and updates
+
+Unknown arguments, nonpositive/invalid watch intervals and intervals exceeding the platform timer range are errors. Watch defaults to 60 seconds and clamps positive values below 5 seconds to 5. Decimal seconds are accepted. `--check` is valid only with `update`; quota flags cannot be combined with that command. Self-update accepts stable numeric versions from the registry, launches npm.cmd through cmd.exe on Windows using validated arguments, and reports interrupted installs as failures.

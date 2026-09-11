@@ -66,8 +66,15 @@ export function parseArgs(argv: string[]): CliOptions {
     if (a === 'update' && o.command == null) o.command = 'update';
     else if (a === '--json') o.json = true;
     else if (a === '--watch') {
-      const n = Number(argv[i + 1]);
-      if (Number.isFinite(n)) { o.watch = n; i++; } else o.watch = 60;
+      const value = argv[i + 1];
+      if (value === undefined || value.startsWith('--') || ['-h', '-v'].includes(value)) o.watch = 60;
+      else {
+        const n = Number(value);
+        if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(value) || !Number.isFinite(n) || n <= 0 || n * 1000 > 2 ** 31 - 1) {
+          throw new Error(`invalid --watch value ${JSON.stringify(value)} — expected positive seconds within the timer range`);
+        }
+        o.watch = Math.max(5, n); i++;
+      }
     } else if (a === '--source') {
       const v = argv[++i];
       if (!(VALID_SOURCES as readonly string[]).includes(v)) {
@@ -84,6 +91,11 @@ export function parseArgs(argv: string[]): CliOptions {
     else if (a === '--check') o.check = true;
     else if (a === '-v' || a === '--version') o.version = true;
     else if (a === '-h' || a === '--help') o.help = true;
+    else throw new Error(`unknown argument ${JSON.stringify(a)}`);
+  }
+  if (o.check && o.command !== 'update') throw new Error('--check requires update');
+  if (o.command === 'update' && argv.some((a) => ['--watch', '--json', '--source', '--channel', '--no-cache', '--refresh'].includes(a))) {
+    throw new Error('quota options cannot be combined with update');
   }
   return o;
 }

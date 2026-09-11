@@ -20,14 +20,11 @@ import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
 import { currentVersion, runUpdate } from './update.js';
 import type { Snapshot } from './types.js';
-import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const CACHE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'agy-usage');
-const CACHE_FILE = join(CACHE_DIR, 'quota.json');
-const CACHE_TTL_MS = 5 * 60 * 1000;
+import { readCache, writeCache } from './cache.js';
+export { readCache, writeCache } from './cache.js';
 
 // The API path fails in ways that look alike on the wire but need different
 // things from the user — see ApiErrorKind in api.ts. Printing "sign in again"
@@ -109,54 +106,6 @@ Environment variables:
   NO_COLOR              Disable ANSI color in the rendered panel.
   PORT / HOST           HTTP server bind (server mode only).
 `;
-
-// --- cache -------------------------------------------------------------------
-
-/**
- * Cached alongside the snapshot: the `source`/`channel` that produced it.
- * Without this, a cache hit from e.g. `--source auto` falling back to PTY
- * would be silently returned to a later `--source api` call within the TTL
- * window (never calling the API, never throwing) — directly contradicting
- * the documented `api: API only (throws on failure)` contract. Requiring an
- * exact match keys the cache by *request mode*, not just time.
- */
-interface CacheEntry {
-  ts: number;
-  source: SnapshotOptions['source'];
-  channel: SnapshotOptions['channel'];
-  snap: Snapshot;
-}
-
-/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
-export function readCache(
-  source: SnapshotOptions['source'],
-  channel: SnapshotOptions['channel'],
-  cacheFile: string = CACHE_FILE,
-): Snapshot | null {
-  try {
-    const entry = JSON.parse(readFileSync(cacheFile, 'utf8')) as CacheEntry;
-    if (entry.source !== source || entry.channel !== channel) return null;
-    if (Date.now() - entry.ts < CACHE_TTL_MS) return entry.snap;
-  } catch {
-    /* no/expired/incompatible-format cache */
-  }
-  return null;
-}
-
-/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
-export function writeCache(
-  snap: Snapshot,
-  source: SnapshotOptions['source'],
-  channel: SnapshotOptions['channel'],
-  cacheFile: string = CACHE_FILE,
-): void {
-  try {
-    mkdirSync(dirname(cacheFile), { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify({ ts: Date.now(), source, channel, snap } satisfies CacheEntry));
-  } catch {
-    /* cache is best-effort */
-  }
-}
 
 // --- fetch -------------------------------------------------------------------
 

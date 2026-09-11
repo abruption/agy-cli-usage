@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Cache file protection
+
+The cache directory/file use 0700/0600 on POSIX, including existing owner-controlled caches. Windows uses the user directory’s inherited ACL. Symlinks, non-regular files, invalid snapshots, expired records and future timestamps are ignored. Writes use a private temporary file in the same directory and atomic replacement; failures never prevent quota output. Only the snapshot is cached, never OAuth tokens.

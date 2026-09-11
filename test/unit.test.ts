@@ -475,3 +475,4 @@ import './polling.test.js';
 import './cache.test.js';
 import './data.test.js';
 import './cli.test.js';
+import './terminal.test.js';

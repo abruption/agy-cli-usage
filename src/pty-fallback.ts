@@ -34,8 +34,9 @@ function resolveAgy(): string {
 const AGY_BIN = resolveAgy();
 // --- VT reconstruction --------------------------------------------------------
 
-async function reconstructScreen(raw: Buffer): Promise<string> {
-  const { Terminal } = await import('@xterm/headless');
+export async function reconstructScreen(raw: Buffer): Promise<string> {
+  // The UMD package exposes only a default export through Node ESM interop.
+  const { Terminal } = (await import('@xterm/headless')).default;
   const term = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 200 });
   await new Promise<void>((res) => term.write(raw, res));
   const buf = term.buffer.active;
@@ -122,8 +123,16 @@ export async function captureUsageViaPty(): Promise<ParsedPanel> {
     throw new Error('No PTY backend captured agy output (need python3 on POSIX, or node-pty on Windows)');
   }
   const screen = await reconstructScreen(raw);
+  return parseCapturedPanel(screen);
+}
+
+/** Distinguish a login screen from a changed usage layout without printing captured secrets. */
+export function parseCapturedPanel(screen: string): ParsedPanel {
   const parsed = parsePanel(screen);
   if (!parsed.groups.length) {
+    if (/Open the URL below in your browser|authorization code\.\.\.|Click here to authenticate/i.test(screen)) {
+      throw new Error('agy requested interactive sign-in in this PTY session; check credential access or sign in from the same session, then retry');
+    }
     throw new Error('Could not parse /usage panel from agy output');
   }
   return parsed;

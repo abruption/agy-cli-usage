@@ -279,3 +279,7 @@ Node.js 22.13.0 or newer is required. Upgrade Node 18/20 before installing this 
 ### CI and package verification
 
 `npm run smoke:package` builds and packs the release artifact, installs it under a temporary prefix and checks both command aliases without credentials. Korean documentation is included in the tarball. CI pins Action revisions, uses read-only repository permissions, audits dependencies and verifies package installation on Linux/Windows. Release creation and npm publication run in separate jobs; only publication receives OIDC permission, and it checks out the newly created release tag. Required gate names are `lint`, `security-audit`, `package-smoke`, and the Node support PR’s `supported-tests`; migrate protection only after they pass on main.
+
+### PTY authentication
+
+PTY fallback requires `agy` to be signed in in the same OS session. If its screen requests browser authentication, the command reports that interactive sign-in is required; it does not print the authorization URL/code. An API credential may remain readable even when agy itself requests a new interactive login. SSH sessions can have different keychain access from a local terminal. Check credential access in the session where the PTY runs; the authentication screen does not establish that the whole machine is signed out.

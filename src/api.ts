@@ -10,6 +10,8 @@
 // the PTY fallback exists for when it changes.
 
 import type { FetchResult, RawQuotaResponse } from './types.js';
+import { requestJson, type RequestDeps } from './request.js';
+import { isRecord, assertQuotaResponse } from './data.js';
 import { currentVersion } from './update.js';
 
 // The UA is load-bearing, not cosmetic: Cloud Code picks the product from the
@@ -58,7 +60,7 @@ interface LoadCodeAssistResponse {
   currentTier?: { id?: string; upgradeSubscriptionUri?: string };
 }
 
-export interface FetchOptions {
+export interface FetchOptions extends RequestDeps {
   host?: string;
   channel?: 'daily' | 'prod';
 }
@@ -83,8 +85,8 @@ function extractEmail(uri: string | undefined): string | null {
   }
 }
 
-async function postInternal<T>(host: string, accessToken: string, method: string, body: unknown): Promise<T> {
-  const res = await fetch(`https://${host}/v1internal:${method}`, {
+async function postInternal<T>(host: string, accessToken: string, method: string, body: unknown, deps: RequestDeps): Promise<T> {
+  return requestJson<T>(`https://${host}/v1internal:${method}`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -92,11 +94,7 @@ async function postInternal<T>(host: string, accessToken: string, method: string
       'User-Agent': UA,
     },
     body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    throw new ApiError(`${method} -> HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
-  }
-  return (await res.json()) as T;
+  }, (status) => new ApiError(`${method} -> HTTP ${status}`, status), deps);
 }
 
 /** Fetch the raw quota summary from the Cloud Code API. */
@@ -114,7 +112,13 @@ export async function fetchQuotaSummary(accessToken: string, opts: FetchOptions 
     try {
       const lca = await postInternal<LoadCodeAssistResponse>(host, accessToken, 'loadCodeAssist', {
         metadata: { ideType: 'ANTIGRAVITY' },
-      });
+      }, opts);
+      if (!isRecord(lca) || (lca.cloudaicompanionProject != null && typeof lca.cloudaicompanionProject !== 'string')
+        || (lca.currentTier != null && (!isRecord(lca.currentTier)
+          || (lca.currentTier.id != null && typeof lca.currentTier.id !== 'string')
+          || (lca.currentTier.upgradeSubscriptionUri != null && typeof lca.currentTier.upgradeSubscriptionUri !== 'string')))) {
+        throw new ApiError('Invalid loadCodeAssist response', 0);
+      }
       const project = lca.cloudaicompanionProject;
       if (!project) {
         throw new ApiError(
@@ -126,12 +130,13 @@ export async function fetchQuotaSummary(accessToken: string, opts: FetchOptions 
         );
       }
 
-      const raw = await postInternal<RawQuotaResponse>(host, accessToken, 'retrieveUserQuotaSummary', { project });
+      const raw = await postInternal<RawQuotaResponse>(host, accessToken, 'retrieveUserQuotaSummary', { project }, opts);
+      assertQuotaResponse(raw);
       return {
         raw,
         host,
-        tier: lca.currentTier?.id ?? null,
-        account: extractEmail(lca.currentTier?.upgradeSubscriptionUri),
+        tier: typeof lca.currentTier?.id === 'string' ? lca.currentTier.id : null,
+        account: extractEmail(typeof lca.currentTier?.upgradeSubscriptionUri === 'string' ? lca.currentTier.upgradeSubscriptionUri : undefined),
       };
     } catch (err) {
       lastErr = err;

@@ -1,6 +1,7 @@
 // Normalizes quota data from either source (direct API JSON or PTY-parsed text)
 // into one shape consumed by the renderer / JSON output / HTTP endpoint.
 
+import { assertQuotaResponse, normalizeFraction, normalizeDate } from './data.js';
 import type { BucketKind, FetchResult, ParsedPanel, Snapshot } from './types.js';
 
 function bucketKind(window: string | undefined, label: string): BucketKind {
@@ -17,17 +18,18 @@ function secondsUntil(resetAt: string | undefined, now: number): number | null {
 
 /** Build a normalized snapshot from the raw retrieveUserQuotaSummary response. */
 export function fromApi({ raw, host, account, tier }: FetchResult, nowMs: number = Date.now()): Snapshot {
+  assertQuotaResponse(raw);
   const groups = (raw.groups ?? []).map((g) => ({
     name: g.displayName ?? 'Models',
     models: (g.description ?? '').replace(/^Models within this group:\s*/i, '').trim(),
     buckets: (g.buckets ?? []).map((b) => {
-      const remaining = typeof b.remainingFraction === 'number' ? b.remainingFraction : null;
+      const remaining = normalizeFraction(b.remainingFraction);
       return {
         kind: bucketKind(b.window, b.displayName ?? ''),
         label: b.displayName ?? b.window ?? '',
         remainingFraction: remaining,
         usedFraction: remaining == null ? null : 1 - remaining,
-        resetAt: b.resetTime ?? null,
+        resetAt: normalizeDate(b.resetTime),
         resetsInSeconds: secondsUntil(b.resetTime, nowMs),
         available: remaining === 1,
         description: b.description ?? null,
@@ -50,16 +52,23 @@ export function fromPty(parsed: ParsedPanel, nowMs: number = Date.now()): Snapsh
   const groups = (parsed.groups ?? []).map((g) => ({
     name: g.name,
     models: g.models ?? '',
-    buckets: (g.buckets ?? []).map((b) => ({
-      kind: b.kind,
-      label: b.label,
-      remainingFraction: b.remainingFraction ?? null,
-      usedFraction: b.remainingFraction == null ? null : 1 - b.remainingFraction,
-      resetAt: b.resetsInSeconds != null ? new Date(nowMs + b.resetsInSeconds * 1000).toISOString() : null,
-      resetsInSeconds: b.resetsInSeconds ?? null,
-      available: b.available ?? b.remainingFraction === 1,
-      description: b.description ?? null,
-    })),
+    buckets: (g.buckets ?? []).map((b) => {
+      const remaining = normalizeFraction(b.remainingFraction);
+      const seconds = typeof b.resetsInSeconds === 'number' && Number.isFinite(b.resetsInSeconds)
+        ? Math.max(0, Math.round(b.resetsInSeconds)) : null;
+      const reset = seconds === null ? NaN : nowMs + seconds * 1000;
+      const validReset = Number.isFinite(reset) && Math.abs(reset) <= 8.64e15;
+      return {
+        kind: b.kind,
+        label: b.label,
+        remainingFraction: remaining,
+        usedFraction: remaining == null ? null : 1 - remaining,
+        resetAt: validReset ? new Date(reset).toISOString() : null,
+        resetsInSeconds: validReset ? seconds : null,
+        available: remaining === 1,
+        description: b.description ?? null,
+      };
+    }),
   }));
   return {
     account: parsed.account ?? null,
@@ -74,7 +83,7 @@ export function fromPty(parsed: ParsedPanel, nowMs: number = Date.now()): Snapsh
 
 /** Format a seconds duration like agy: "73h 53m" / "2h 7m" / "12m". */
 export function formatDuration(seconds: number | null): string | null {
-  if (seconds == null) return null;
+  if (seconds == null || !Number.isFinite(seconds) || seconds < 0) return null;
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   if (h > 0) return `${h}h ${m}m`;

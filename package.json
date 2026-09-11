@@ -48,7 +48,6 @@
   },
   "author": "abruption",
   "dependencies": {
-    "@napi-rs/keyring": "^1.3.0",
     "@xterm/headless": "^6.0.0"
   },
   "optionalDependencies": {

@@ -64,7 +64,7 @@ npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 18.
+> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 22.13.0.
 
 ## 사용법
 
@@ -125,7 +125,7 @@ npm run check     # tsc --noEmit (타입 체크)
 npm test          # 빌드 후 node --test (자격증명·네트워크 불필요, 순수 로직)
 ```
 
-- **CI**: push/PR마다 Ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.
+- **CI**: push/PR마다 Ubuntu의 Node 22.13.0과 Ubuntu·macOS·Windows의 Node 22/24를 검증합니다. 보호 설정 전환 중에는 기존 체크도 유지합니다.
 - **릴리스**: [release-please](https://github.com/googleapis/release-please) — Conventional Commits 기반 완전 자동화. main에 머지된 커밋으로 **Release PR**(버전 범프 + CHANGELOG)이 유지되고, 그 PR을 머지하면 태그·GitHub Release·`npm publish --provenance`가 자동 실행됩니다.
 
 ## 주의
@@ -147,7 +147,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 ## TL;DR
 
-- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 18. 같은 호스트에 `agy` 로그인 필요.
+- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 22.13.0. 같은 호스트에 `agy` 로그인 필요.
 - 구조화 데이터: `agy-cli-usage --json` (stdout) 또는 `GET http://127.0.0.1:3007/quota`.
 - `auto`의 소스 순서: 직접 API → PTY 폴백. 결과는 5분 캐시.
 
@@ -269,3 +269,7 @@ POSIX에서는 기존 소유자 캐시를 포함해 디렉터리 0700·파일 06
 ### CLI 검증·업데이트
 
 알 수 없는 인자, 0 이하·잘못된 watch 간격, 타이머 범위를 초과하는 간격은 오류입니다. 기본 60초이며 양수 5초 미만은 5초로 조정하고 소수 초를 허용합니다. `--check`는 `update` 전용이며 조회 옵션과 update를 함께 사용할 수 없습니다. 자가 업데이트는 안정판 숫자 버전을 검증하고 Windows에서 안전한 인자로 cmd.exe를 통해 npm.cmd를 실행합니다. 설치가 중단되면 실패 코드를 반환합니다.
+
+### Node.js 지원 전환
+
+Node.js 22.13.0 이상이 필요합니다. Node 18/20 사용자는 설치 전에 Node를 업그레이드하세요. 타입 정의는 Node 22에 맞춥니다. CI는 최소 22.13.0 및 Linux·macOS·Windows의 Node 22/24를 검증합니다. 기존 Node 18/20 CI는 브랜치 보호 체크 이름 전환을 위해 임시 유지하며 지원 약속이 아닙니다. 관리자의 전환·복구 절차는 `.github/CI_MIGRATION.md`에 있습니다.

@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### CI and package verification
+
+`npm run smoke:package` builds and packs the release artifact, installs it under a temporary prefix and checks both command aliases without credentials. Korean documentation is included in the tarball. CI pins Action revisions, uses read-only repository permissions, audits dependencies and verifies package installation on Linux/Windows. Release creation and npm publication run in separate jobs; only publication receives OIDC permission, and it checks out the newly created release tag. Required gate names are `lint`, `security-audit`, `package-smoke`, and the Node support PR’s `supported-tests`; migrate protection only after they pass on main.

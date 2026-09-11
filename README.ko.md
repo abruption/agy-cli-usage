@@ -237,3 +237,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - 자동화 시 `--json`(서브프로세스) 또는 `GET /quota`(상시 서비스)를 호출. 둘 다 동일 캐시를 거치므로 고빈도 폴링도 안전.
 - 휴먼 패널은 파싱하지 말 것 — ANSI 이스케이프 포함, 레이아웃 지향. `Snapshot` JSON이 안정적 계약.
 - 이 도구는 자격증명을 **읽기만** 하며, `agy` 세션을 변경하거나 토큰을 되쓰지 않음.
+
+### CI·배포 패키지 검증
+
+`npm run smoke:package`는 빌드·패키징 후 임시 경로에 설치하여 자격증명 없이 두 실행 별칭을 검증합니다. 한국어 문서도 배포 파일에 포함합니다. CI는 Action SHA 고정·읽기 전용 권한·의존성 감사·Linux/Windows 설치 검증을 적용합니다. 릴리스 생성과 npm 배포 job을 분리하고 배포 job만 OIDC 권한을 받으며 새 릴리스 태그를 체크아웃합니다. 필수 체크는 `lint`, `security-audit`, `package-smoke`, Node 지원 PR의 `supported-tests`이며 main에서 성공한 뒤 보호 설정을 전환합니다.

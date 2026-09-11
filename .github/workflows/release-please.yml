@@ -1,18 +1,11 @@
 name: Release
 
-# Fully automated releases via release-please:
-#  1. Every push to main updates a "release PR" (version bump + CHANGELOG from
-#     Conventional Commits).
-#  2. Merging that PR creates the GitHub Release + tag, then this same run
-#     publishes to npm with provenance.
-# No manual `npm version` needed.
 on:
   push:
     branches: [main]
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   release-please:
@@ -20,29 +13,37 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-      id-token: write # npm provenance (OIDC)
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v5
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # The steps below run only when a release was just created (release PR merged).
-      - uses: actions/checkout@v7
-        if: ${{ steps.release.outputs.release_created }}
-
-      - uses: actions/setup-node@v7
-        if: ${{ steps.release.outputs.release_created }}
+  publish:
+    needs: [release-please]
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
-
-      - if: ${{ steps.release.outputs.release_created }}
-        run: npm ci --omit=optional
-      - if: ${{ steps.release.outputs.release_created }}
-        run: npm test
-      - if: ${{ steps.release.outputs.release_created }}
-        run: npm publish --provenance --access public
+      - run: npm ci --omit=optional
+      - run: npm run check
+      - run: npm run lint
+      - run: npm test
+      - run: npm run smoke:package
+      - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

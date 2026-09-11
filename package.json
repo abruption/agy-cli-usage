@@ -16,7 +16,9 @@
     "test": "node --test dist/test/unit.test.js",
     "start": "tsc && node dist/src/main.js",
     "serve": "tsc && node dist/src/server.js",
-    "prepack": "tsc"
+    "prepack": "tsc",
+    "smoke:package": "npm run clean && npm run build && node scripts/package-smoke.mjs",
+    "clean": "node -e \"require('node:fs').rmSync('dist', {recursive: true, force: true})\""
   },
   "engines": {
     "node": ">=22.13.0"
@@ -25,6 +27,7 @@
     "dist/src/**/*.js",
     "dist/src/**/*.d.ts",
     "README.md",
+    "README.ko.md",
     "CHANGELOG.md",
     "LICENSE"
   ],

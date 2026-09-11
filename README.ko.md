@@ -273,3 +273,7 @@ POSIX에서는 기존 소유자 캐시를 포함해 디렉터리 0700·파일 06
 ### Node.js 지원 전환
 
 Node.js 22.13.0 이상이 필요합니다. Node 18/20 사용자는 설치 전에 Node를 업그레이드하세요. 타입 정의는 Node 22에 맞춥니다. CI는 최소 22.13.0 및 Linux·macOS·Windows의 Node 22/24를 검증합니다. 기존 Node 18/20 CI는 브랜치 보호 체크 이름 전환을 위해 임시 유지하며 지원 약속이 아닙니다. 관리자의 전환·복구 절차는 `.github/CI_MIGRATION.md`에 있습니다.
+
+### CI·배포 패키지 검증
+
+`npm run smoke:package`는 빌드·패키징 후 임시 경로에 설치하여 자격증명 없이 두 실행 별칭을 검증합니다. 한국어 문서도 배포 파일에 포함합니다. CI는 Action SHA 고정·읽기 전용 권한·의존성 감사·Linux/Windows 설치 검증을 적용합니다. 릴리스 생성과 npm 배포 job을 분리하고 배포 job만 OIDC 권한을 받으며 새 릴리스 태그를 체크아웃합니다. 필수 체크는 `lint`, `security-audit`, `package-smoke`, Node 지원 PR의 `supported-tests`이며 main에서 성공한 뒤 보호 설정을 전환합니다.

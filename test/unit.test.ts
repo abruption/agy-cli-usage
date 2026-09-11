@@ -467,3 +467,5 @@ test('unknown routes return 404 with an error body', async (t) => {
   assert.equal(res.status, 404);
   assert.deepEqual(await res.json(), { error: 'not found' });
 });
+
+import './keyring-compat.test.js';

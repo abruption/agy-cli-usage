@@ -17,6 +17,7 @@
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
 
+import { readNativeSecret } from './native-keyring.js';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -54,14 +55,8 @@ interface Cred {
 
 // --- raw keyring read --------------------------------------------------------
 
-async function readViaNapiEsm(): Promise<string | null> {
-  try {
-    const { Entry } = await import('@napi-rs/keyring');
-    if (!Entry) return null;
-    return new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT).getPassword() ?? null;
-  } catch {
-    return null;
-  }
+function readViaNapiEsm(): Promise<string | null> {
+  return readNativeSecret();
 }
 
 function readViaCli(): string | null {
@@ -175,24 +170,25 @@ function readViaFile(): string | null {
   return null;
 }
 
-async function readRawSecret(): Promise<string | null> {
-  // On macOS, `security` CLI is tried first — @napi-rs/keyring's synchronous
-  // native Keychain call can hang indefinitely in non-interactive environments
-  // (blocks the event loop, so no timeout can rescue it).
-  if (process.platform === 'darwin') {
-    const fromCli = readViaCli();
-    if (fromCli) return fromCli;
+export interface CredentialProviders {
+  platform?: NodeJS.Platform;
+  cli?: () => Promise<string | null> | string | null;
+  native?: () => Promise<string | null> | string | null;
+  windows?: () => Promise<string | null> | string | null;
+  file?: () => string | null;
+}
+
+/** Injection is for credential-free tests; defaults preserve agy's provider precedence. */
+export async function readRawSecret(providers: CredentialProviders = {}): Promise<string | null> {
+  const cli = providers.cli ?? readViaCli;
+  const native = providers.native ?? readViaNapiEsm;
+  const backends = (providers.platform ?? process.platform) === 'darwin' ? [cli, native] : [native, cli];
+  for (const backend of [...backends, providers.windows ?? readViaWindowsCredman, providers.file ?? readViaFile]) {
+    try {
+      const raw = await backend();
+      if (raw) return raw;
+    } catch { /* continue to the next read-only provider */ }
   }
-  const fromNapi = await readViaNapiEsm();
-  if (fromNapi) return fromNapi;
-  if (process.platform !== 'darwin') {
-    const fromCli = readViaCli();
-    if (fromCli) return fromCli;
-  }
-  const fromWin = readViaWindowsCredman();
-  if (fromWin) return fromWin;
-  const fromFile = readViaFile();
-  if (fromFile) return fromFile;
   return null;
 }
 

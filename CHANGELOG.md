@@ -10,6 +10,29 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [1.0.0](https://github.com/abruption/agy-cli-usage/compare/v0.4.7...v1.0.0) (2026-09-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* require Node.js 22 and align compatibility checks ([#72](https://github.com/abruption/agy-cli-usage/issues/72))
+* harden HTTP request handling and quota privacy ([#66](https://github.com/abruption/agy-cli-usage/issues/66))
+
+### Bug Fixes
+
+* bound credential and API operations ([#67](https://github.com/abruption/agy-cli-usage/issues/67)) ([d377e5d](https://github.com/abruption/agy-cli-usage/commit/d377e5dacbfe53a4296779f6f1d9adef670d92a6))
+* harden HTTP request handling and quota privacy ([#66](https://github.com/abruption/agy-cli-usage/issues/66)) ([1e727fe](https://github.com/abruption/agy-cli-usage/commit/1e727feb73e858e9bcb01c5ae93c471809fbd875))
+* prevent overlapping quota fetches and bound PTY capture ([#68](https://github.com/abruption/agy-cli-usage/issues/68)) ([e549dec](https://github.com/abruption/agy-cli-usage/commit/e549decf73dd2cb5a256e242e9916ef8105edc81))
+* protect and validate quota cache files ([#69](https://github.com/abruption/agy-cli-usage/issues/69)) ([759a8ee](https://github.com/abruption/agy-cli-usage/commit/759a8eee9658b7c05bd6d7ced9ab3ceddc404b0d))
+* restore PTY reconstruction and report login requirements ([#75](https://github.com/abruption/agy-cli-usage/issues/75)) ([1fc26f5](https://github.com/abruption/agy-cli-usage/commit/1fc26f58c42c8b0d253af7330f1ad24dd2ce7d23))
+* validate CLI options and update execution ([#71](https://github.com/abruption/agy-cli-usage/issues/71)) ([106a412](https://github.com/abruption/agy-cli-usage/commit/106a412a4ba6400169bed910f4e5cc5db8ba65da))
+* validate credentials and normalized quota data ([#70](https://github.com/abruption/agy-cli-usage/issues/70)) ([c7ac173](https://github.com/abruption/agy-cli-usage/commit/c7ac1739b149dbcc2ef798c66476deb0552d9b90))
+
+
+### Miscellaneous Chores
+
+* require Node.js 22 and align compatibility checks ([#72](https://github.com/abruption/agy-cli-usage/issues/72)) ([05f9a79](https://github.com/abruption/agy-cli-usage/commit/05f9a792c283286a9c228dd240910a23ca42f494))
+
 ## [0.4.7](https://github.com/abruption/agy-cli-usage/compare/v0.4.6...v0.4.7) (2026-09-08)
 
 

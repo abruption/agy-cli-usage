@@ -1,6 +1,7 @@
 // Renders a normalized quota snapshot as a terminal panel, mirroring agy's
 // `/usage` layout (progress bar + percent + reset time per bucket).
 
+import { terminalText, normalizeFraction } from './data.js';
 import { formatDuration } from './quota.js';
 import type { Bucket, Snapshot } from './types.js';
 
@@ -24,7 +25,7 @@ function barColor(remaining: number | null): string {
 // as-is. Shared by the bar and the percentage text so they never disagree
 // (e.g. bar capped at 100% while the text next to it reads "150.00%").
 function clampFraction(remainingFraction: number | null): number | null {
-  return remainingFraction == null ? null : Math.max(0, Math.min(1, remainingFraction));
+  return normalizeFraction(remainingFraction);
 }
 
 function bar(remainingFraction: number | null): string {
@@ -36,7 +37,7 @@ function bar(remainingFraction: number | null): string {
 
 function bucketLine(b: Bucket): string {
   const lines: string[] = [];
-  lines.push(`    ${bold(b.label)}`);
+  lines.push(`    ${bold(terminalText(b.label))}`);
   if (b.available) {
     lines.push(`    [${bar(1)}] ${c('32', 'Quota available')}`);
   } else {
@@ -81,16 +82,16 @@ export function renderPanel(snap: Snapshot, nowMs: number = Date.now()): string 
   const out: string[] = [];
   out.push('');
   out.push(bold('  Models & Quota'));
-  if (snap.account) out.push(`  ${dim('Account:')} ${snap.account}`);
+  if (snap.account) out.push(`  ${dim('Account:')} ${terminalText(snap.account)}`);
   out.push(
-    `  ${dim(`source: ${snap.source}${snap.host ? ` · ${snap.host}` : ''} · ${snap.fetchedAt}`)}` +
+    `  ${dim(`source: ${snap.source}${snap.host ? ` · ${terminalText(snap.host)}` : ''} · ${terminalText(snap.fetchedAt)}`)}` +
       freshnessSuffix(snap.fetchedAt, nowMs),
   );
   out.push('');
 
   for (const g of snap.groups) {
-    out.push(bold(`  ${g.name.toUpperCase()}`));
-    if (g.models) out.push(`  ${dim(`Models within this group: ${g.models}`)}`);
+    out.push(bold(`  ${terminalText(g.name).toUpperCase()}`));
+    if (g.models) out.push(`  ${dim(`Models within this group: ${terminalText(g.models)}`)}`);
     out.push('');
     for (const b of g.buckets) {
       out.push(bucketLine(b));
@@ -98,7 +99,7 @@ export function renderPanel(snap: Snapshot, nowMs: number = Date.now()): string 
     }
   }
   if (snap.note) {
-    out.push(dim(wrap(snap.note, 76, '  │')));
+    out.push(dim(wrap(terminalText(snap.note), 76, '  │')));
   }
   return out.join('\n');
 }

@@ -64,7 +64,7 @@ npm install -g agy-cli-usage
 agy-cli-usage
 ```
 
-> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 18.
+> 사전 조건: 같은 머신에서 `agy`에 로그인되어 있을 것, Node.js >= 22.13.0.
 
 ## 사용법
 
@@ -100,12 +100,12 @@ agy-cli-usage --version        # 버전 출력
 
 | OS / 환경 | 저장 위치 | 읽는 방법 |
 |-----------|----------|----------|
-| macOS | Keychain | `@napi-rs/keyring` (폴백 `security`) |
-| Linux 데스크톱 | Secret Service | `@napi-rs/keyring` (폴백 `secret-tool`) |
+| macOS | Keychain | `security` CLI |
+| Linux 데스크톱 | Secret Service | `secret-tool` CLI |
 | **Windows** | Credential Manager | 내장 `powershell.exe`로 Win32 `CredRead` 호출 |
 | **헤드리스 Linux** | 토큰 파일 | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
 
-읽기 순서: `키링 → OS CLI → Windows credman → 토큰 파일 → PTY`. 파일 경로는 `AGY_OAUTH_TOKEN_FILE`로 override.
+읽기 순서: `플랫폼별 OS 자격증명 조회 → 토큰 파일 → PTY`. 파일 경로는 `AGY_OAUTH_TOKEN_FILE`로 override.
 
 ## HTTP 엔드포인트 (선택)
 
@@ -125,7 +125,7 @@ npm run check     # tsc --noEmit (타입 체크)
 npm test          # 빌드 후 node --test (자격증명·네트워크 불필요, 순수 로직)
 ```
 
-- **CI**: push/PR마다 Ubuntu(Node 18/20/22) + macOS/Windows(Node 22)에서 테스트.
+- **CI**: push/PR마다 Ubuntu의 Node 22.13.0과 Ubuntu·macOS·Windows의 Node 22/24를 검증합니다. 보호 설정 전환 중에는 기존 체크도 유지합니다.
 - **릴리스**: [release-please](https://github.com/googleapis/release-please) — Conventional Commits 기반 완전 자동화. main에 머지된 커밋으로 **Release PR**(버전 범프 + CHANGELOG)이 유지되고, 그 PR을 머지하면 태그·GitHub Release·`npm publish --provenance`가 자동 실행됩니다.
 
 ## 주의
@@ -147,7 +147,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 ## TL;DR
 
-- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 18. 같은 호스트에 `agy` 로그인 필요.
+- 바이너리: `agy-cli-usage` (별칭 `agy-usage`). Node >= 22.13.0. 같은 호스트에 `agy` 로그인 필요.
 - 구조화 데이터: `agy-cli-usage --json` (stdout) 또는 `GET http://127.0.0.1:3007/quota`.
 - `auto`의 소스 순서: 직접 API → PTY 폴백. 결과는 5분 캐시.
 
@@ -205,7 +205,7 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 
 | 라우트 | 응답 |
 |--------|------|
-| `GET /quota` | `200` `Snapshot` JSON(`--json`과 동일 형태). `?refresh=1`은 캐시 우회. 실패 시 `502 {"error":...}`. 헤더: `Cache-Control: public, max-age=300`, `Access-Control-Allow-Origin: *`. |
+| `GET /quota` | `200` `Snapshot` JSON(`--json`과 동일 형태). `?refresh=1`은 캐시 우회. 실패 시 `502 {"error":...}`. 헤더: `Cache-Control: no-store`, `Access-Control-Allow-Origin: <allowed origin>`. |
 | `GET /healthz` | `200 {"ok":true}` |
 | (그 외) | `404 {"error":"not found"}` |
 
@@ -237,6 +237,42 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - 자동화 시 `--json`(서브프로세스) 또는 `GET /quota`(상시 서비스)를 호출. 둘 다 동일 캐시를 거치므로 고빈도 폴링도 안전.
 - 휴먼 패널은 파싱하지 말 것 — ANSI 이스케이프 포함, 레이아웃 지향. `Snapshot` JSON이 안정적 계약.
 - 이 도구는 자격증명을 **읽기만** 하며, `agy` 세션을 변경하거나 토큰을 되쓰지 않음.
+
+### native 의존성 제거
+
+`@napi-rs/keyring`과 플랫폼 바이너리는 설치하지 않습니다. macOS는 내장 `security`, Linux는 `secret-tool`(Ubuntu 패키지: `libsecret-tools`), Windows는 내장 PowerShell/CredRead를 사용합니다. OS 조회 실패 시 토큰 파일, auto 모드에서는 PTY 폴백이 유지됩니다. Linux 데스크톱에서 `secret-tool`과 토큰 파일이 모두 없으면 PTY를 사용하며 Secret Service의 API 경로가 필요하면 `libsecret-tools`를 설치하세요. Windows PTY 지원을 위한 선택적 `node-pty`는 유지합니다.
+
+### HTTP 접근 정책
+
+서버는 `GET`과 허용된 CORS preflight만 처리합니다. 응답은 `Cache-Control: no-store`이며 내부 5분 캐시는 별도로 유지합니다. 잘못된 요청은 400, 허용되지 않은 Host/Origin은 403, 지원하지 않는 메서드는 405입니다. 업스트림 오류는 상세정보 없이 `502 {"error":"quota unavailable"}`로 반환합니다.
+
+기본 허용 Host는 `localhost`, `127.0.0.1`, `[::1]`입니다. `AGY_ALLOWED_HOSTS=quota.example`로 이름을 추가하며 포트는 비교에서 제외합니다. 브라우저 Origin은 기본 거부합니다. `AGY_ALLOWED_ORIGINS=https://dashboard.example,http://localhost:8080`처럼 마지막 슬래시 없는 정확한 HTTP(S) Origin을 등록하세요. `*`와 `null`은 지원하지 않습니다. Origin 없는 스크립트 요청은 허용하며 Fetch Metadata가 cross-site인 브라우저 요청은 거부합니다.
+
+`HOST` 기본값은 `127.0.0.1`, `PORT`는 1–65535(기본 3007)입니다. Host/Origin 검사는 인증이 아니므로 외부 인터페이스에 바인딩한 경우 인증 프록시나 신뢰할 수 있는 네트워크를 사용하세요.
+
+### 작업 시간 제한
+
+API·OAuth refresh는 응답 본문을 포함해 요청당 10초, OS 자격증명 조회는 비동기 실행과 각각 5초로 제한합니다. macOS는 `security`, Linux는 `secret-tool`, Windows는 PowerShell/CredRead를 사용하며 실패 시 기존 읽기 전용 폴백을 계속합니다. 업스트림 본문과 자격증명 프로세스 stderr는 오류 메시지에 포함하지 않습니다.
+
+### 폴링·PTY 실행 제한
+
+같은 source/channel/cache 옵션·캐시 경로의 동시 요청은 프로세스 내 진행 중인 조회를 공유하며 실패 후 재시도할 수 있습니다. watch는 조회 완료 후 지정 간격을 기다리며 Ctrl-C로 다음 폴링을 중단합니다. PTY 캡처는 기존 23초 창을 유지하고 부모 프로세스에서 30초·출력 4MiB로 제한합니다. POSIX Python 캡처는 임시 파일 없이 스트리밍하고 종료 시 PTY 자식 세션을 정리합니다.
+
+### 캐시 파일 보호
+
+POSIX에서는 기존 소유자 캐시를 포함해 디렉터리 0700·파일 0600을 적용합니다. Windows는 사용자 디렉터리의 상속 ACL을 사용합니다. 심볼릭 링크·비정상 파일·잘못된 Snapshot·만료·미래 타임스탬프는 캐시 미스로 처리합니다. 같은 디렉터리의 비공개 임시 파일을 원자적으로 교체하며 저장 실패가 조회 출력을 막지 않습니다. 캐시에는 Snapshot만 저장하고 OAuth 토큰은 저장하지 않습니다.
+
+### 데이터 검증
+
+잘못된 자격증명 객체·만료일·토큰 refresh 응답은 자격증명 오류로 처리합니다. 잘못된 쿼타 구조는 기존 auto 폴백을 실행합니다. 유한한 비율은 0–1로 제한하며 알 수 없거나 유한하지 않은 값·잘못된 리셋 시각은 null입니다. 터미널 출력에서는 제어 시퀀스를 제거하고 JSON은 원본 문자열·기존 Snapshot 필드 구조를 유지합니다.
+
+### CLI 검증·업데이트
+
+알 수 없는 인자, 0 이하·잘못된 watch 간격, 타이머 범위를 초과하는 간격은 오류입니다. 기본 60초이며 양수 5초 미만은 5초로 조정하고 소수 초를 허용합니다. `--check`는 `update` 전용이며 조회 옵션과 update를 함께 사용할 수 없습니다. 자가 업데이트는 안정판 숫자 버전을 검증하고 Windows에서 안전한 인자로 cmd.exe를 통해 npm.cmd를 실행합니다. 설치가 중단되면 실패 코드를 반환합니다.
+
+### Node.js 지원 전환
+
+Node.js 22.13.0 이상이 필요합니다. Node 18/20 사용자는 설치 전에 Node를 업그레이드하세요. 타입 정의는 Node 22에 맞춥니다. CI는 최소 22.13.0 및 Linux·macOS·Windows의 Node 22/24를 검증합니다. 기존 Node 18/20 CI는 브랜치 보호 체크 이름 전환을 위해 임시 유지하며 지원 약속이 아닙니다. 관리자의 전환·복구 절차는 `.github/CI_MIGRATION.md`에 있습니다.
 
 ### CI·배포 패키지 검증
 

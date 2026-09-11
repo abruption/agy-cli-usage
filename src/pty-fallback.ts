@@ -120,8 +120,9 @@ out.close()
 
 // --- VT reconstruction --------------------------------------------------------
 
-async function reconstructScreen(raw: Buffer): Promise<string> {
-  const { Terminal } = await import('@xterm/headless');
+export async function reconstructScreen(raw: Buffer): Promise<string> {
+  // The UMD package exposes only a default export through Node ESM interop.
+  const { Terminal } = (await import('@xterm/headless')).default;
   const term = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true, scrollback: 200 });
   await new Promise<void>((res) => term.write(raw, res));
   const buf = term.buffer.active;

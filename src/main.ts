@@ -12,6 +12,7 @@
 //   agy-cli-usage update [--check]  self-update via npm
 //   agy-cli-usage --version | -v  print the installed version
 
+import { singleFlight, watchLoop } from './polling.js';
 import { getAccessToken, CredentialError } from './credentials.js';
 import { fetchQuotaSummary, ApiError } from './api.js';
 import type { ApiErrorKind } from './api.js';
@@ -20,14 +21,12 @@ import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
 import { currentVersion, runUpdate } from './update.js';
 import type { Snapshot } from './types.js';
-import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CACHE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'agy-usage');
-const CACHE_FILE = join(CACHE_DIR, 'quota.json');
-const CACHE_TTL_MS = 5 * 60 * 1000;
+import { readCache, writeCache, CACHE_FILE } from './cache.js';
+export { readCache, writeCache } from './cache.js';
 
 // The API path fails in ways that look alike on the wire but need different
 // things from the user — see ApiErrorKind in api.ts. Printing "sign in again"
@@ -110,54 +109,6 @@ Environment variables:
   PORT / HOST           HTTP server bind (server mode only).
 `;
 
-// --- cache -------------------------------------------------------------------
-
-/**
- * Cached alongside the snapshot: the `source`/`channel` that produced it.
- * Without this, a cache hit from e.g. `--source auto` falling back to PTY
- * would be silently returned to a later `--source api` call within the TTL
- * window (never calling the API, never throwing) — directly contradicting
- * the documented `api: API only (throws on failure)` contract. Requiring an
- * exact match keys the cache by *request mode*, not just time.
- */
-interface CacheEntry {
-  ts: number;
-  source: SnapshotOptions['source'];
-  channel: SnapshotOptions['channel'];
-  snap: Snapshot;
-}
-
-/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
-export function readCache(
-  source: SnapshotOptions['source'],
-  channel: SnapshotOptions['channel'],
-  cacheFile: string = CACHE_FILE,
-): Snapshot | null {
-  try {
-    const entry = JSON.parse(readFileSync(cacheFile, 'utf8')) as CacheEntry;
-    if (entry.source !== source || entry.channel !== channel) return null;
-    if (Date.now() - entry.ts < CACHE_TTL_MS) return entry.snap;
-  } catch {
-    /* no/expired/incompatible-format cache */
-  }
-  return null;
-}
-
-/** Exported for direct unit testing via an injected `cacheFile` — not part of the CLI's public surface. */
-export function writeCache(
-  snap: Snapshot,
-  source: SnapshotOptions['source'],
-  channel: SnapshotOptions['channel'],
-  cacheFile: string = CACHE_FILE,
-): void {
-  try {
-    mkdirSync(dirname(cacheFile), { recursive: true });
-    writeFileSync(cacheFile, JSON.stringify({ ts: Date.now(), source, channel, snap } satisfies CacheEntry));
-  } catch {
-    /* cache is best-effort */
-  }
-}
-
 // --- fetch -------------------------------------------------------------------
 
 /** Subset of options needed to produce a snapshot (also usable from server.ts). */
@@ -169,7 +120,13 @@ export interface SnapshotOptions {
   cacheFile?: string;
 }
 
-export async function getSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
+export function snapshotKey(opts: SnapshotOptions): string {
+  return JSON.stringify([opts.source, opts.channel, opts.cache, resolve(opts.cacheFile ?? CACHE_FILE)]);
+}
+
+export const getSnapshot = singleFlight(snapshotKey, fetchSnapshot);
+
+async function fetchSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   if (opts.cache && opts.source !== 'pty') {
     const cached = readCache(opts.source, opts.channel, opts.cacheFile);
     if (cached) return cached;
@@ -218,8 +175,15 @@ async function main(): Promise<void> {
         process.stderr.write(`error: ${errMessage(err)}\n`);
       }
     };
-    await tick();
-    setInterval(tick, intervalMs);
+    const controller = new AbortController();
+    const stop = (): void => controller.abort();
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try { await watchLoop(tick, intervalMs, controller.signal); }
+    finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+    }
   } else {
     await once(opts);
   }

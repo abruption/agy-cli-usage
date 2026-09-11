@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Data validation
+
+Malformed credential objects, expiry timestamps and token refresh responses fail with a credential error. Malformed quota structures trigger the existing auto fallback. Finite quota fractions are clamped to 0–1; unknown/nonfinite values and invalid reset times become null. Human terminal fields have control sequences removed; JSON retains source strings and the existing Snapshot field structure.

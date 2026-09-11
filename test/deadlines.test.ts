@@ -31,6 +31,8 @@ test('API status keeps authentication classification without exposing response b
   assert.equal(calls, 1);
   await assert.rejects(refreshAccessToken('fake', { fetch: async () => new Response('private-refresh', { status: 400 }) }),
     (err: unknown) => err instanceof Error && err.message === 'Token refresh failed: HTTP 400');
+  await assert.rejects(refreshAccessToken('fake', { fetch: async () => new Response(JSON.stringify({ access_token: 42 })) }),
+    /invalid access_token/);
 });
 
 test('non-authentication failures still try the next API channel', async () => {

@@ -263,3 +263,7 @@ Concurrent requests with the same source/channel/cache mode and cache path share
 ### Cache file protection
 
 The cache directory/file use 0700/0600 on POSIX, including existing owner-controlled caches. Windows uses the user directory’s inherited ACL. Symlinks, non-regular files, invalid snapshots, expired records and future timestamps are ignored. Writes use a private temporary file in the same directory and atomic replacement; failures never prevent quota output. Only the snapshot is cached, never OAuth tokens.
+
+### Data validation
+
+Malformed credential objects, expiry timestamps and token refresh responses fail with a credential error. Malformed quota structures trigger the existing auto fallback. Finite quota fractions are clamped to 0–1; unknown/nonfinite values and invalid reset times become null. Human terminal fields have control sequences removed; JSON retains source strings and the existing Snapshot field structure.

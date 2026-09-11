@@ -11,6 +11,7 @@
 
 import type { FetchResult, RawQuotaResponse } from './types.js';
 import { requestJson, type RequestDeps } from './request.js';
+import { isRecord, assertQuotaResponse } from './data.js';
 import { currentVersion } from './update.js';
 
 // The UA is load-bearing, not cosmetic: Cloud Code picks the product from the
@@ -112,6 +113,12 @@ export async function fetchQuotaSummary(accessToken: string, opts: FetchOptions 
       const lca = await postInternal<LoadCodeAssistResponse>(host, accessToken, 'loadCodeAssist', {
         metadata: { ideType: 'ANTIGRAVITY' },
       }, opts);
+      if (!isRecord(lca) || (lca.cloudaicompanionProject != null && typeof lca.cloudaicompanionProject !== 'string')
+        || (lca.currentTier != null && (!isRecord(lca.currentTier)
+          || (lca.currentTier.id != null && typeof lca.currentTier.id !== 'string')
+          || (lca.currentTier.upgradeSubscriptionUri != null && typeof lca.currentTier.upgradeSubscriptionUri !== 'string')))) {
+        throw new ApiError('Invalid loadCodeAssist response', 0);
+      }
       const project = lca.cloudaicompanionProject;
       if (!project) {
         throw new ApiError(
@@ -124,11 +131,12 @@ export async function fetchQuotaSummary(accessToken: string, opts: FetchOptions 
       }
 
       const raw = await postInternal<RawQuotaResponse>(host, accessToken, 'retrieveUserQuotaSummary', { project }, opts);
+      assertQuotaResponse(raw);
       return {
         raw,
         host,
-        tier: lca.currentTier?.id ?? null,
-        account: extractEmail(lca.currentTier?.upgradeSubscriptionUri),
+        tier: typeof lca.currentTier?.id === 'string' ? lca.currentTier.id : null,
+        account: extractEmail(typeof lca.currentTier?.upgradeSubscriptionUri === 'string' ? lca.currentTier.upgradeSubscriptionUri : undefined),
       };
     } catch (err) {
       lastErr = err;

@@ -15,6 +15,7 @@
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
 
+import { isRecord } from './data.js';
 import { execFile } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -195,12 +196,21 @@ export function decodeSecret(raw: string): Cred {
   } catch {
     throw new CredentialError('Stored agy credential is not valid JSON');
   }
+  if (!isRecord(parsed) || ('token' in parsed && !isRecord(parsed.token))) {
+    throw new CredentialError('Stored agy credential must be an object containing a token');
+  }
   const token = (parsed.token ?? parsed) as Record<string, unknown>;
   const accessToken = token.access_token;
-  if (typeof accessToken !== 'string' || !accessToken) {
+  if (typeof accessToken !== 'string' || !accessToken.trim()) {
     throw new CredentialError('Stored agy credential has no access_token');
   }
   const expiry = token.expiry;
+  if (expiry != null && (typeof expiry !== 'string' || !Number.isFinite(Date.parse(expiry)))) {
+    throw new CredentialError('Stored agy credential has an invalid expiry');
+  }
+  if (token.refresh_token != null && (typeof token.refresh_token !== 'string' || !token.refresh_token.trim())) {
+    throw new CredentialError('Stored agy credential has an invalid refresh_token');
+  }
   return {
     accessToken,
     refreshToken: typeof token.refresh_token === 'string' ? token.refresh_token : null,
@@ -228,7 +238,15 @@ export async function refreshAccessToken(refreshToken: string, deps: RequestDeps
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
   }, (status) => new CredentialError(`Token refresh failed: HTTP ${status}`), deps);
-  return json.access_token;
+  return decodeRefreshResponse(json);
+}
+
+/** Validate the token endpoint separately so malformed success responses never become Bearer undefined. */
+export function decodeRefreshResponse(value: unknown): string {
+  if (!isRecord(value) || typeof value.access_token !== 'string' || !value.access_token.trim()) {
+    throw new CredentialError('Token refresh returned an invalid access_token');
+  }
+  return value.access_token;
 }
 
 // --- public API --------------------------------------------------------------

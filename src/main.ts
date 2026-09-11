@@ -12,6 +12,7 @@
 //   agy-cli-usage update [--check]  self-update via npm
 //   agy-cli-usage --version | -v  print the installed version
 
+import { singleFlight, watchLoop } from './polling.js';
 import { getAccessToken, CredentialError } from './credentials.js';
 import { fetchQuotaSummary, ApiError } from './api.js';
 import type { ApiErrorKind } from './api.js';
@@ -22,7 +23,7 @@ import { currentVersion, runUpdate } from './update.js';
 import type { Snapshot } from './types.js';
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const CACHE_DIR = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'agy-usage');
@@ -169,7 +170,13 @@ export interface SnapshotOptions {
   cacheFile?: string;
 }
 
-export async function getSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
+export function snapshotKey(opts: SnapshotOptions): string {
+  return JSON.stringify([opts.source, opts.channel, opts.cache, resolve(opts.cacheFile ?? CACHE_FILE)]);
+}
+
+export const getSnapshot = singleFlight(snapshotKey, fetchSnapshot);
+
+async function fetchSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   if (opts.cache && opts.source !== 'pty') {
     const cached = readCache(opts.source, opts.channel, opts.cacheFile);
     if (cached) return cached;
@@ -218,8 +225,15 @@ async function main(): Promise<void> {
         process.stderr.write(`error: ${errMessage(err)}\n`);
       }
     };
-    await tick();
-    setInterval(tick, intervalMs);
+    const controller = new AbortController();
+    const stop = (): void => controller.abort();
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    try { await watchLoop(tick, intervalMs, controller.signal); }
+    finally {
+      process.removeListener('SIGINT', stop);
+      process.removeListener('SIGTERM', stop);
+    }
   } else {
     await once(opts);
   }

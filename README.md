@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Polling and PTY bounds
+
+Concurrent requests with the same source/channel/cache mode and cache path share one in-flight fetch within the process. A failed fetch releases that slot for retry. Watch waits for each fetch to finish, then waits the requested interval. Ctrl-C stops further polling. PTY capture retains the 23-second capture window, with a 30-second parent deadline and 4 MiB output limit. POSIX Python capture streams output directly without temporary capture files, and terminates/reaps the PTY child session on exit.

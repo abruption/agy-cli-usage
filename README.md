@@ -259,3 +259,7 @@ API and OAuth refresh requests have a 10-second deadline including the response 
 ### Polling and PTY bounds
 
 Concurrent requests with the same source/channel/cache mode and cache path share one in-flight fetch within the process. A failed fetch releases that slot for retry. Watch waits for each fetch to finish, then waits the requested interval. Ctrl-C stops further polling. PTY capture retains the 23-second capture window, with a 30-second parent deadline and 4 MiB output limit. POSIX Python capture streams output directly without temporary capture files, and terminates/reaps the PTY child session on exit.
+
+### Cache file protection
+
+The cache directory/file use 0700/0600 on POSIX, including existing owner-controlled caches. Windows uses the user directory’s inherited ACL. Symlinks, non-regular files, invalid snapshots, expired records and future timestamps are ignored. Writes use a private temporary file in the same directory and atomic replacement; failures never prevent quota output. Only the snapshot is cached, never OAuth tokens.

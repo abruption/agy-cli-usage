@@ -472,3 +472,4 @@ import './credential-backends.test.js';
 import './http.test.js';
 import './deadlines.test.js';
 import './polling.test.js';
+import './cache.test.js';

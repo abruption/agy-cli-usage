@@ -100,7 +100,7 @@ The token is **read only** from wherever `agy` stored it. Handled per platform a
 
 | OS / environment | Storage | How it's read |
 |------------------|---------|---------------|
-| macOS | Keychain | `@napi-rs/keyring` (fallback `security`) |
+| macOS | Keychain | `security` CLI, then an isolated `@napi-rs/keyring` worker |
 | Linux desktop | Secret Service | `@napi-rs/keyring` (fallback `secret-tool`) |
 | **Windows** | Credential Manager | Win32 `CredRead` via built-in `powershell.exe` |
 | **Headless Linux** | token file | `~/.gemini/antigravity-cli/antigravity-oauth-token` |
@@ -239,3 +239,7 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 - For automation, call `--json` (subprocess) or `GET /quota` (long-running service). Both go through the same cache, so high-frequency polling is safe.
 - Do not parse the human panel; it contains ANSI escapes and is layout-oriented. The `Snapshot` JSON is the stable contract.
 - The tool only **reads** credentials; it never mutates `agy`'s session or writes tokens back.
+
+### Operation deadlines
+
+API and OAuth refresh requests have a 10-second deadline including the response body. Each credential CLI/native worker has a 5-second deadline. Native keyring calls run in a separate, killable Node process. macOS tries `security` first; other platforms try the native worker first. Failed providers continue to the existing read-only fallbacks. Upstream response bodies and credential provider stderr are never included in errors.

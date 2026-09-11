@@ -8,7 +8,7 @@
 //     "auth_method": "consumer" }
 //
 // Read backends, tried in order:
-//   1. @napi-rs/keyring native module  (macOS / Linux Secret Service)
+//   1. macOS security CLI first; elsewhere isolated @napi-rs/keyring worker
 //   2. OS CLI fallback                  (`security` on macOS, `secret-tool` on Linux)
 //   3. Windows Credential Manager       (CredRead via powershell.exe — go-keyring's
 //                                        target format differs from keyring-rs's)
@@ -17,10 +17,12 @@
 // If every backend fails, the caller falls back to the PTY path which drives
 // `agy` itself.
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { requestJson, type RequestDeps } from './request.js';
 
 // OAuth client for the Antigravity CLI. This is an installed/desktop ("public")
 // OAuth client: per Google's own docs the client secret of an installed app is
@@ -54,34 +56,29 @@ interface Cred {
 
 // --- raw keyring read --------------------------------------------------------
 
-async function readViaNapiEsm(): Promise<string | null> {
-  try {
-    const { Entry } = await import('@napi-rs/keyring');
-    if (!Entry) return null;
-    return new Entry(KEYRING_SERVICE, KEYRING_ACCOUNT).getPassword() ?? null;
-  } catch {
-    return null;
-  }
+export const CREDENTIAL_TIMEOUT_MS = 5_000;
+
+/** Provider output is private; neither failures nor stderr are logged. */
+export function runSecretCommand(file: string, args: string[], timeoutMs = CREDENTIAL_TIMEOUT_MS): Promise<string | null> {
+  return new Promise((resolve) => {
+    const proc = execFile(file, args, {
+      encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL', maxBuffer: 64 * 1024,
+      windowsHide: true,
+    }, (err, stdout) => resolve(err ? null : stdout.trim() || null));
+    proc.stdin?.end();
+  });
 }
 
-function readViaCli(): string | null {
-  try {
-    if (process.platform === 'darwin') {
-      return execFileSync(
-        'security',
-        ['find-generic-password', '-s', KEYRING_SERVICE, '-a', KEYRING_ACCOUNT, '-w'],
-        { encoding: 'utf8' },
-      ).trim();
-    }
-    if (process.platform === 'linux') {
-      return execFileSync(
-        'secret-tool',
-        ['lookup', 'service', KEYRING_SERVICE, 'account', KEYRING_ACCOUNT],
-        { encoding: 'utf8' },
-      ).trim();
-    }
-  } catch {
-    return null;
+function readViaNapiEsm(): Promise<string | null> {
+  return runSecretCommand(process.execPath, [fileURLToPath(new URL('./keyring-worker.js', import.meta.url))]);
+}
+
+async function readViaCli(): Promise<string | null> {
+  if (process.platform === 'darwin') {
+    return runSecretCommand('security', ['find-generic-password', '-s', KEYRING_SERVICE, '-a', KEYRING_ACCOUNT, '-w']);
+  }
+  if (process.platform === 'linux') {
+    return runSecretCommand('secret-tool', ['lookup', 'service', KEYRING_SERVICE, 'account', KEYRING_ACCOUNT]);
   }
   return null;
 }
@@ -124,15 +121,14 @@ $b=[CredApi]::Read('${WIN_CRED_TARGET}')
 if($b -eq $null){ exit 1 }
 [Console]::Out.Write([Convert]::ToBase64String($b))`;
 
-function readViaWindowsCredman(): string | null {
+async function readViaWindowsCredman(): Promise<string | null> {
   if (process.platform !== 'win32') return null;
   try {
     const encoded = Buffer.from(PS_READ_CRED, 'utf16le').toString('base64');
-    const b64 = execFileSync(
+    const b64 = await runSecretCommand(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
-      { encoding: 'utf8' },
-    ).trim();
+    );
     if (!b64) return null;
     const raw = Buffer.from(b64, 'base64');
     // go-keyring writes the value as UTF-8; tolerate UTF-16LE just in case.
@@ -175,24 +171,25 @@ function readViaFile(): string | null {
   return null;
 }
 
-async function readRawSecret(): Promise<string | null> {
-  // On macOS, `security` CLI is tried first — @napi-rs/keyring's synchronous
-  // native Keychain call can hang indefinitely in non-interactive environments
-  // (blocks the event loop, so no timeout can rescue it).
-  if (process.platform === 'darwin') {
-    const fromCli = readViaCli();
-    if (fromCli) return fromCli;
+export interface CredentialProviders {
+  platform?: NodeJS.Platform;
+  cli?: () => Promise<string | null>;
+  native?: () => Promise<string | null>;
+  windows?: () => Promise<string | null>;
+  file?: () => string | null;
+}
+
+/** Injection is for credential-free tests; defaults preserve agy's provider precedence. */
+export async function readRawSecret(providers: CredentialProviders = {}): Promise<string | null> {
+  const cli = providers.cli ?? readViaCli;
+  const native = providers.native ?? readViaNapiEsm;
+  const backends = (providers.platform ?? process.platform) === 'darwin' ? [cli, native] : [native, cli];
+  for (const backend of [...backends, providers.windows ?? readViaWindowsCredman, providers.file ?? readViaFile]) {
+    try {
+      const raw = await backend();
+      if (raw) return raw;
+    } catch { /* continue to the next read-only provider */ }
   }
-  const fromNapi = await readViaNapiEsm();
-  if (fromNapi) return fromNapi;
-  if (process.platform !== 'darwin') {
-    const fromCli = readViaCli();
-    if (fromCli) return fromCli;
-  }
-  const fromWin = readViaWindowsCredman();
-  if (fromWin) return fromWin;
-  const fromFile = readViaFile();
-  if (fromFile) return fromFile;
   return null;
 }
 
@@ -229,22 +226,18 @@ function isExpired(cred: Cred, skewMs = 60_000): boolean {
   return cred.expiry.getTime() - Date.now() < skewMs;
 }
 
-async function refreshAccessToken(refreshToken: string): Promise<string> {
+export async function refreshAccessToken(refreshToken: string, deps: RequestDeps = {}): Promise<string> {
   const body = new URLSearchParams({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: OAUTH_CLIENT_ID,
     client_secret: OAUTH_CLIENT_SECRET,
   });
-  const res = await fetch(TOKEN_URL, {
+  const json = await requestJson<{ access_token: string }>(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString(),
-  });
-  if (!res.ok) {
-    throw new CredentialError(`Token refresh failed: HTTP ${res.status} ${await res.text()}`);
-  }
-  const json = (await res.json()) as { access_token: string };
+  }, (status) => new CredentialError(`Token refresh failed: HTTP ${status}`), deps);
   return json.access_token;
 }
 

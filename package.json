@@ -28,6 +28,7 @@
     "dist/src/**/*.d.ts",
     "README.md",
     "README.ko.md",
+    "docs/SNAPSHOT.md",
     "CHANGELOG.md",
     "LICENSE"
   ],

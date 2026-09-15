@@ -63,7 +63,7 @@ export function npmInvocation(args: string[], platform: NodeJS.Platform = proces
     : { file: 'npm', args };
 }
 
-function stableVersion(value: unknown): string | null {
+export function stableVersion(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const version = value.trim();
   return /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)

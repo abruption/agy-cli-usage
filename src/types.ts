@@ -74,7 +74,23 @@ export interface Group {
   buckets: Bucket[];
 }
 
+/** Advisory notice for this installed CLI, shared with the session-peer decision model.
+ * Present only for a fresh, validated stable latest > current. Absence means no
+ * usable notice, not proof of being current. Never part of the quota cache.
+ */
+export interface ClientUpdate {
+  schemaVersion: 1;
+  status: 'available';
+  current: string;
+  latest: string;
+  checkedAt: string;
+  source: 'npm_registry_cache';
+  command: 'agy-cli-usage update';
+}
+
+/** Identical contract for CLI JSON and GET /quota; update metadata is optional. */
 export interface Snapshot {
+  clientUpdate?: ClientUpdate;
   account: string | null;
   tier: string | null;
   fetchedAt: string;

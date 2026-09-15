@@ -15,9 +15,9 @@ const npm = (args, cwd = process.cwd()) => execFileSync(process.execPath, [npmCl
 });
 try {
   const [packed] = JSON.parse(npm(['pack', '--json', '--ignore-scripts', '--pack-destination', directory]));
-  assert.ok(packed.files.every(({ path }) => /^(dist\/src\/.+\.(?:js|d\.ts)|package\.json|README(?:\.ko)?\.md|CHANGELOG\.md|LICENSE)$/.test(path)),
+  assert.ok(packed.files.every(({ path }) => /^(dist\/src\/.+\.(?:js|d\.ts)|docs\/SNAPSHOT\.md|package\.json|README(?:\.ko)?\.md|CHANGELOG\.md|LICENSE)$/.test(path)),
     'Package must contain only runtime JS/types and public documentation');
-  for (const path of ['dist/src/main.js', 'dist/src/server.js', 'dist/src/main.d.ts', 'README.ko.md']) {
+  for (const path of ['dist/src/main.js', 'dist/src/server.js', 'dist/src/main.d.ts', 'dist/src/update-worker.js', 'docs/SNAPSHOT.md', 'README.ko.md']) {
     assert.ok(packed.files.some((file) => file.path === path), `Missing ${path}`);
   }
   const installDir = join(directory, 'installation');

@@ -101,6 +101,9 @@ export function renderPanel(snap: Snapshot, nowMs: number = Date.now()): string 
   if (snap.note) {
     out.push(dim(wrap(terminalText(snap.note), 76, '  │')));
   }
+  if (snap.clientUpdate) {
+    out.push(dim(`  Update available: ${terminalText(snap.clientUpdate.current)} → ${terminalText(snap.clientUpdate.latest)} · agy-cli-usage update`));
+  }
   return out.join('\n');
 }
 

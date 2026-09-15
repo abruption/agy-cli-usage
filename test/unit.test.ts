@@ -476,3 +476,4 @@ import './cache.test.js';
 import './data.test.js';
 import './cli.test.js';
 import './terminal.test.js';
+import './update-notices.test.js';

@@ -82,9 +82,12 @@ agy-cli-usage --version        # print version
 | `--watch [secs]` | Refresh every N seconds (default 60) |
 | `--source <auto\|api\|pty>` | Data source (default `auto`: API → PTY on failure) |
 | `--channel <auto\|daily\|prod>` | Cloud Code host |
-| `--no-cache` / `--refresh` | Bypass the 5-minute cache |
+| `--no-cache` / `--refresh` | Bypass the 5-minute quota cache |
+| `--no-update-check` | Disable automatic update checks and notices |
 | `-h`, `--help` | Show help |
 | `-v`, `--version` | Show version |
+
+When a newer stable release is cached, the panel adds `Update available: 1.0.0 → 1.0.1 · agy-cli-usage update`. Automatic checks use a separate 24-hour cache and a background process, so quota reporting never waits for npm. Disable them with `--no-update-check` or `AGY_NO_UPDATE_CHECK=1`.
 
 ## How it works
 
@@ -163,7 +166,8 @@ npm test          # build, then node --test (no credentials/network; pure logic)
 | `agy-cli-usage --source <auto\|api\|pty>` | `api`: API only (throws on failure). `pty`: PTY only (ignores cache). `auto`: API→PTY. |
 | `agy-cli-usage --channel <auto\|daily\|prod>` | Cloud Code host selection. `auto` tries `daily` then `prod`. |
 | `agy-cli-usage --no-cache` / `--refresh` | Force a fresh fetch (skip the 5-min cache). |
-| `agy-cli-usage update [--check]` | Self-update via `npm i -g`. `--check` reports only. |
+| `agy-cli-usage --no-update-check` | Disable automatic checks and cached notices. |
+| `agy-cli-usage update [--check]` | Fresh check that refreshes the update cache. `--check` reports without installing; otherwise self-update via `npm i -g`. |
 | `agy-cli-usage --version` / `-v` | Print version string to stdout. |
 
 ## JSON output (`--json`) — schema
@@ -176,6 +180,15 @@ npm test          # build, then node --test (no credentials/network; pure logic)
   "source": "api | pty",
   "host": "cloud code host | null",
   "note": "string | null",
+  "clientUpdate": {                     // optional: fresh newer stable CLI only
+    "schemaVersion": 1,
+    "status": "available",
+    "current": "1.0.0",
+    "latest": "1.0.1",
+    "checkedAt": "2026-09-15T10:00:00.000Z",
+    "source": "npm_registry_cache",
+    "command": "agy-cli-usage update"
+  },
   "groups": [
     {
       "name": "GEMINI MODELS",
@@ -203,6 +216,12 @@ Notes for parsing:
 - `kind` is normalized to `weekly` / `5h` where recognized, otherwise the raw window/label string.
 - `account` may be `null` even on a successful `"source": "api"` response — see the Caveats section above (top-tier subscribers have no email source in the API path). Use `--source pty` / a PTY-sourced snapshot if you need the account email reliably.
 
+### `clientUpdate` contract
+
+`--json` and `GET /quota` use the same optional field. Include a `schemaVersion: 1`, `status: "available"` object only when a stable version checked within 24 hours is newer than the installed CLI. `current` describes the CLI producing this response, not `agy` or another host. `checkedAt` is the update lookup's start time, independent of quota `fetchedAt`. No update is installed automatically.
+
+Current, unknown, pending, offline, malformed, expired and opted-out states omit `clientUpdate`. **Absence does not guarantee the CLI is current.** Update failures never change quota data, the primary CLI exit code, or HTTP status. See the [Snapshot contract](docs/SNAPSHOT.md) for the decision table and cache guarantees.
+
 ## HTTP API (`npm run serve` / `dist/src/server.js`)
 
 | Route | Response |
@@ -219,7 +238,8 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 |----------|--------|
 | `AGY_OAUTH_TOKEN_FILE` | Override the token file path (headless fallback). |
 | `AGY_BIN` | Path to the `agy` binary (PTY source). Else resolved from `PATH`, then `~/.local/bin`. |
-| `XDG_CACHE_HOME` | Cache base dir (cache lives at `<base>/agy-usage/quota.json`; default `~/.cache`). |
+| `XDG_CACHE_HOME` | Cache base dir (default `~/.cache`): `agy-usage/quota.json` and separate `agy-usage/update.json`. |
+| `AGY_NO_UPDATE_CHECK` | Set to `1` to disable automatic checks/notices in CLI, watch and HTTP. Explicit `update [--check]` still checks. |
 | `NO_COLOR` | Disable ANSI color in the rendered panel. |
 | `PORT` / `HOST` | HTTP server bind (server mode only). |
 
@@ -232,6 +252,9 @@ Binds `HOST` (default `127.0.0.1`) : `PORT` (default `3007`).
 ## Data sources & cache
 
 - **Cache**: `<XDG_CACHE_HOME|~/.cache>/agy-usage/quota.json`, TTL **5 minutes**. Avoids hammering the upstream API on `--watch`/polling. Bypassed when `source === 'pty'` or the cache is disabled (`--no-cache`/`--refresh`, or `?refresh=1` on the HTTP route).
+- **Update cache**: `<XDG_CACHE_HOME|~/.cache>/agy-usage/update.json`, maximum **4 KiB**, TTL **24 hours** (including failed/pending attempts). `clientUpdate` is stripped on quota-cache reads and writes. `--no-cache`/`--refresh`/`?refresh=1` do not bypass the update TTL.
+- **Automatic checks**: a missing/expired record starts a silent detached Node worker and returns quota immediately. The first response may omit the notice; later invocations/watch ticks/HTTP requests read the completed cache. A process retry ceiling and 30-second filesystem lease suppress duplicate automatic lookups. The worker has a 20-second watchdog and reuses the existing 8-second npm lookup and 8-second public registry fallback. Unwritable caches skip automatic lookup.
+- **Explicit checks**: `update --check` refreshes the same cache regardless of TTL or automatic opt-out. Cache-write failures do not change explicit lookup/install results. Offline lookup failure retains exit code 1. Opt-out does not cancel workers already started.
 - **API path** reads the token (keyring/file), then calls `loadCodeAssist` → `retrieveUserQuotaSummary`. **PTY path** drives `agy` (`python3 pty` on POSIX, `node-pty` on Windows) and needs `agy` runnable in the environment.
 
 ## Integration notes

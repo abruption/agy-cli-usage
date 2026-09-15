@@ -82,9 +82,12 @@ agy-cli-usage --version        # 버전 출력
 | `--watch [초]` | N초 간격 갱신 (기본 60) |
 | `--source <auto\|api\|pty>` | 데이터 소스 (기본 `auto`: API → 실패 시 PTY) |
 | `--channel <auto\|daily\|prod>` | Cloud Code 호스트 |
-| `--no-cache` / `--refresh` | 5분 캐시 무시하고 강제 조회 |
+| `--no-cache` / `--refresh` | 5분 쿼타 캐시 무시하고 강제 조회 |
+| `--no-update-check` | 자동 업데이트 확인·알림 비활성화 |
 | `-h`, `--help` | 도움말 |
 | `-v`, `--version` | 버전 |
+
+새 안정 버전이 캐시에 확인되면 패널 하단에 `Update available: 1.0.0 → 1.0.1 · agy-cli-usage update`를 표시합니다. 자동 확인은 별도의 24시간 캐시와 백그라운드 프로세스를 사용하므로 쿼타 조회가 npm 응답을 기다리지 않습니다. `--no-update-check` 또는 `AGY_NO_UPDATE_CHECK=1`로 끌 수 있습니다.
 
 ## 동작 방식
 
@@ -161,7 +164,8 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 | `agy-cli-usage --source <auto\|api\|pty>` | `api`: API 전용(실패 시 throw). `pty`: PTY 전용(캐시 무시). `auto`: API→PTY. |
 | `agy-cli-usage --channel <auto\|daily\|prod>` | Cloud Code 호스트 선택. `auto`는 `daily`→`prod` 순서. |
 | `agy-cli-usage --no-cache` / `--refresh` | 강제 신규 조회(5분 캐시 스킵). |
-| `agy-cli-usage update [--check]` | `npm i -g` 자가 업데이트. `--check`는 알림만. |
+| `agy-cli-usage --no-update-check` | 자동 업데이트 확인과 캐시된 알림을 끔. |
+| `agy-cli-usage update [--check]` | 새로 확인해 업데이트 캐시 갱신. `--check`는 설치 없이 알림만, 그 외는 `npm i -g`로 업데이트. |
 | `agy-cli-usage --version` / `-v` | 버전 문자열을 stdout에 출력. |
 
 ## JSON 출력 (`--json`) — 스키마
@@ -174,6 +178,15 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
   "source": "api | pty",
   "host": "cloud code host | null",
   "note": "string | null",
+  "clientUpdate": {                     // 선택 필드: 유효한 새 CLI 안정 버전만
+    "schemaVersion": 1,
+    "status": "available",
+    "current": "1.0.0",
+    "latest": "1.0.1",
+    "checkedAt": "2026-09-15T10:00:00.000Z",
+    "source": "npm_registry_cache",
+    "command": "agy-cli-usage update"
+  },
   "groups": [
     {
       "name": "GEMINI MODELS",
@@ -201,6 +214,12 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 - `kind`는 인식 시 `weekly`/`5h`로 정규화, 아니면 원본 window/label 문자열.
 - `"source": "api"`로 성공한 응답에서도 `account`가 `null`일 수 있습니다 — 위 주의 섹션 참고(최상위 티어 구독자는 API 경로에 이메일 소스가 없음). 계정 이메일이 반드시 필요하면 `--source pty` 또는 PTY 기반 스냅샷을 사용하세요.
 
+### `clientUpdate` 계약
+
+`--json`과 `GET /quota`는 동일한 선택 필드를 사용합니다. 24시간 이내 확인한 안정 버전이 현재 설치 버전보다 클 때만 `schemaVersion: 1`, `status: "available"` 객체를 포함합니다. `current`는 응답을 만든 CLI 설치 버전이며 `agy`나 다른 장비의 버전이 아닙니다. `checkedAt`은 업데이트 확인 시작 시각으로 쿼타의 `fetchedAt`과 독립적입니다. 자동 설치는 수행하지 않습니다.
+
+현재 버전·알 수 없음·확인 중·오프라인·잘못된 버전·만료 캐시·opt-out에서는 `clientUpdate`를 생략합니다. **필드가 없다고 최신 버전이 보장되는 것은 아닙니다.** 알림 때문에 쿼타 데이터, CLI 종료 코드 또는 HTTP 상태가 달라지지 않습니다. 자세한 판정표·캐시 계약은 [Snapshot 계약](docs/SNAPSHOT.md)을 참고하세요.
+
 ## HTTP API (`npm run serve` / `dist/src/server.js`)
 
 | 라우트 | 응답 |
@@ -217,7 +236,8 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 |------|------|
 | `AGY_OAUTH_TOKEN_FILE` | 토큰 파일 경로 override(헤드리스 폴백). |
 | `AGY_BIN` | `agy` 바이너리 경로(PTY 소스). 없으면 `PATH`→`~/.local/bin` 순 탐색. |
-| `XDG_CACHE_HOME` | 캐시 베이스 디렉토리(캐시는 `<base>/agy-usage/quota.json`, 기본 `~/.cache`). |
+| `XDG_CACHE_HOME` | 캐시 베이스 디렉토리(기본 `~/.cache`). `agy-usage/quota.json`과 별도의 `agy-usage/update.json`을 저장. |
+| `AGY_NO_UPDATE_CHECK` | `1`이면 CLI·watch·HTTP의 자동 확인과 알림을 끔. 명시적 `update [--check]`는 계속 확인. |
 | `NO_COLOR` | 렌더 패널의 ANSI 색상 비활성화. |
 | `PORT` / `HOST` | HTTP 서버 바인딩(서버 모드 한정). |
 
@@ -230,6 +250,9 @@ npm test          # 빌드 후 node --test (자격증명·네트워크 불필요
 ## 데이터 소스 & 캐시
 
 - **캐시**: `<XDG_CACHE_HOME|~/.cache>/agy-usage/quota.json`, TTL **5분**. `--watch`/폴링 시 업스트림 API 부하 회피. `source === 'pty'`이거나 캐시 비활성(`--no-cache`/`--refresh`, HTTP 라우트의 `?refresh=1`) 시 우회.
+- **업데이트 캐시**: `<XDG_CACHE_HOME|~/.cache>/agy-usage/update.json`, 최대 **4 KiB**, TTL **24시간**(실패·확인 중 기록 포함). 쿼타 캐시에는 `clientUpdate`를 저장하지 않으며 읽을 때도 제거합니다. `--no-cache`/`--refresh`/`?refresh=1`은 업데이트 TTL을 우회하지 않습니다.
+- **자동 확인**: 캐시가 없거나 만료되면 조용한 별도 Node 프로세스를 시작하고 즉시 쿼타를 반환합니다. 첫 응답은 알림을 생략할 수 있고, 후속 실행·watch·HTTP가 완료된 캐시를 읽습니다. 프로세스 내 재시도 제한과 30초 파일 잠금으로 중복 자동 조회를 막습니다. 작업자는 20초로 제한하고 기존 npm 조회·공개 레지스트리 폴백의 각 8초 제한을 재사용합니다. 저장 불가 시 자동 조회를 건너뜁니다.
+- **명시적 확인**: `update --check`는 TTL·자동 opt-out과 관계없이 새로 확인해 같은 캐시를 갱신합니다. 캐시 저장 실패가 명시적 조회·설치 결과를 바꾸지 않습니다. 오프라인 확인 실패 시 기존대로 종료 코드 1을 반환합니다. opt-out은 이미 시작된 작업자를 취소하지 않습니다.
 - **API 경로**는 토큰(키링/파일)을 읽어 `loadCodeAssist` → `retrieveUserQuotaSummary` 호출. **PTY 경로**는 `agy`를 구동(POSIX `python3 pty`, Windows `node-pty`)하며 환경에서 `agy` 실행 가능해야 함.
 
 ## 연동 노트

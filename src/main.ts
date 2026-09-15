@@ -20,12 +20,13 @@ import { captureUsageViaPty } from './pty-fallback.js';
 import { fromApi, fromPty } from './quota.js';
 import { renderPanel } from './render.js';
 import { currentVersion, runUpdate } from './update.js';
-import type { Snapshot } from './types.js';
+import { getClientUpdate, refreshUpdateCache } from './update-cache.js';
+import type { ClientUpdate, Snapshot } from './types.js';
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { readCache, writeCache, CACHE_FILE } from './cache.js';
+import { readCache, writeCache, quotaOnly, CACHE_FILE } from './cache.js';
 export { readCache, writeCache } from './cache.js';
 
 // The API path fails in ways that look alike on the wire but need different
@@ -45,6 +46,7 @@ export interface CliOptions {
   source: 'auto' | 'api' | 'pty';
   channel: 'auto' | 'daily' | 'prod';
   cache: boolean;
+  updateCheck?: boolean;
   command: 'update' | null;
   check: boolean;
   version?: boolean;
@@ -88,13 +90,14 @@ export function parseArgs(argv: string[]): CliOptions {
       }
       o.channel = v as CliOptions['channel'];
     } else if (a === '--no-cache' || a === '--refresh') o.cache = false;
+    else if (a === '--no-update-check') o.updateCheck = false;
     else if (a === '--check') o.check = true;
     else if (a === '-v' || a === '--version') o.version = true;
     else if (a === '-h' || a === '--help') o.help = true;
     else throw new Error(`unknown argument ${JSON.stringify(a)}`);
   }
   if (o.check && o.command !== 'update') throw new Error('--check requires update');
-  if (o.command === 'update' && argv.some((a) => ['--watch', '--json', '--source', '--channel', '--no-cache', '--refresh'].includes(a))) {
+  if (o.command === 'update' && argv.some((a) => ['--watch', '--json', '--source', '--channel', '--no-cache', '--refresh', '--no-update-check'].includes(a))) {
     throw new Error('quota options cannot be combined with update');
   }
   return o;
@@ -108,6 +111,7 @@ const HELP = `agy-cli-usage — Antigravity CLI (agy) usage/quota monitor
   agy-cli-usage --source <auto|api|pty>
   agy-cli-usage --channel <auto|daily|prod>
   agy-cli-usage --no-cache | --refresh
+  agy-cli-usage --no-update-check  disable automatic update checks and notices
   agy-cli-usage update [--check]  self-update via npm (--check: report only)
   agy-cli-usage --version | -v
 
@@ -115,9 +119,11 @@ Environment variables:
   AGY_OAUTH_TOKEN_FILE  Override the token file path (headless fallback).
   AGY_BIN               Path to the agy binary (PTY source). Else resolved from
                         PATH, then ~/.local/bin.
-  XDG_CACHE_HOME        Cache base dir (cache lives at
-                        <base>/agy-usage/quota.json; default ~/.cache).
+  XDG_CACHE_HOME        Cache base dir (default ~/.cache); agy-usage contains
+                        quota.json (5 min) and update.json (24 hours).
   NO_COLOR              Disable ANSI color in the rendered panel.
+  AGY_NO_UPDATE_CHECK    Set to 1 to disable automatic update checks/notices
+                        (also HTTP). Explicit update [--check] still checks.
   PORT / HOST           HTTP server bind (server mode only).
 `;
 
@@ -128,6 +134,7 @@ export interface SnapshotOptions {
   source: 'auto' | 'api' | 'pty';
   channel: 'auto' | 'daily' | 'prod';
   cache: boolean;
+  updateCheck?: boolean;
   /** Override the cache file path — for tests only; defaults to the real user cache. */
   cacheFile?: string;
 }
@@ -136,7 +143,22 @@ export function snapshotKey(opts: SnapshotOptions): string {
   return JSON.stringify([opts.source, opts.channel, opts.cache, resolve(opts.cacheFile ?? CACHE_FILE)]);
 }
 
-export const getSnapshot = singleFlight(snapshotKey, fetchSnapshot);
+/** Decorate after quota caching/single-flight so stale quota never pins notices. */
+export function createSnapshotGetter(
+  quota: (opts: SnapshotOptions) => Promise<Snapshot>,
+  notice: (enabled?: boolean) => ClientUpdate | undefined = getClientUpdate,
+): (opts: SnapshotOptions) => Promise<Snapshot> {
+  const getQuota = singleFlight(snapshotKey, quota);
+  return async (opts) => {
+    const snap = quotaOnly(await getQuota(opts));
+    try {
+      const clientUpdate = notice(opts.updateCheck !== false);
+      return clientUpdate ? { ...snap, clientUpdate } : snap;
+    } catch { return snap; }
+  };
+}
+
+export const getSnapshot = createSnapshotGetter(fetchSnapshot);
 
 async function fetchSnapshot(opts: SnapshotOptions): Promise<Snapshot> {
   if (opts.cache && opts.source !== 'pty') {
@@ -175,7 +197,9 @@ async function main(): Promise<void> {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) { process.stdout.write(HELP); return; }
   if (opts.version) { process.stdout.write(currentVersion() + '\n'); return; }
-  if (opts.command === 'update') { process.exit(await runUpdate({ checkOnly: opts.check })); }
+  if (opts.command === 'update') {
+    process.exit(await runUpdate({ checkOnly: opts.check }, { latest: () => refreshUpdateCache({ force: true }) }));
+  }
 
   if (opts.watch != null) {
     const intervalMs = Math.max(5, opts.watch) * 1000;

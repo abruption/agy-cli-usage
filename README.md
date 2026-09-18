@@ -1,3 +1,5 @@
+> **Maintenance ended — public archive.** Antigravity CLI 1.1.11 and later provide native print-mode quota JSON. Version 1.0.1 is the final documentation-only release; no further feature, compatibility, or security updates are planned. Published npm versions remain available. See [Migration](#migration-to-native-agy-usage) before changing an existing integration.
+
 <div align="center">
 
 # agy-cli-usage
@@ -49,11 +51,35 @@ Reads `agy`'s `/usage` panel — per–model-group weekly & 5-hour limits, remai
 
 `agy-cli-usage` shows the same usage/quota information as `agy`'s interactive `/usage` slash command, but from a plain shell — one-shot, watch mode, or machine-readable JSON. Use it to keep an eye on your remaining quota, drive a status bar, or feed a dashboard.
 
-## Why
+## Migration to native Agy usage
 
-`agy -p "<prompt>"` (headless mode) is a prompt-only path: it does not render TUI slash commands like `/usage`, so usage can't be polled or automated. This tool fills that gap by reading the quota directly (and falling back to driving `agy` in a pseudo-terminal when needed).
+Check the installed Antigravity CLI version first:
 
-## Quick start
+```bash
+agy --version
+# Only after confirming Agy >= 1.1.11:
+agy -p /usage --output-format json
+```
+
+**Do not run the second command on Agy 1.1.10 or earlier.** Older versions can interpret `/usage` as a model prompt and consume inference quota rather than return usage data. Upgrade Agy first. Native support was introduced in the [official 1.1.11 release](https://github.com/google-antigravity/antigravity-cli/releases/tag/1.1.11).
+
+Native quota lookup replaces this project's core purpose, but it is **not a drop-in replacement** for the existing CLI/HTTP interfaces:
+
+| Existing package | Native print-mode JSON / migration |
+|---|---|
+| Snapshot `groups` | `command.data.groups`; adapt the response envelope |
+| `remainingFraction` | `remaining_fraction`; adapt field names |
+| `resetAt` | `reset_time`; validate the target consumer's handling |
+| `server.js` / `GET /quota` | Not supplied by this one-shot native command |
+| `--watch` and five-minute cache | Not supplied by this one-shot native command |
+
+Existing Snapshot consumers, dashboards, and HTTP integrations need their own adapter and refresh/cache policy. Validate the native response on each target host before switching; archiving this repository does not migrate consumers automatically. Existing functionality is retained unchanged as historical code, not as a promise of continued upstream compatibility. The remaining sections document that legacy interface.
+
+## Original motivation
+
+Before Agy 1.1.11, `agy -p "<prompt>"` did not provide native print-mode `/usage` JSON. This tool filled that gap by reading quota directly, with a pseudo-terminal fallback. New integrations should use the version-gated native command above instead.
+
+## Legacy quick start
 
 ```bash
 # Run once, no install

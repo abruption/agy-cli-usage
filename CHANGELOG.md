@@ -10,6 +10,13 @@
 
 * use plain v* tags in release-please ([#12](https://github.com/abruption/agy-cli-usage/issues/12)) ([74b648d](https://github.com/abruption/agy-cli-usage/commit/74b648df24967f71a43095a80e7340a6b5ac2e39)), closes [#9](https://github.com/abruption/agy-cli-usage/issues/9)
 
+## [1.0.1](https://github.com/abruption/agy-cli-usage/compare/v1.0.0...v1.0.1) (2026-09-18)
+
+
+### Documentation
+
+* announce final maintenance release ([cacec99](https://github.com/abruption/agy-cli-usage/commit/cacec992078e2fbfb378e165b059370c6bdaa336))
+
 ## [1.0.0](https://github.com/abruption/agy-cli-usage/compare/v0.4.7...v1.0.0) (2026-09-11)
 
 
